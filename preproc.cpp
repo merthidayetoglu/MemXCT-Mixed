@@ -46,6 +46,7 @@ extern int proj_buffsize;
 extern int back_blocksize;
 extern int back_buffsize;
 
+int proj_maxnz;
 int proj_rownztot;
 long proj_rownzall;
 int *proj_rowdispl;
@@ -65,6 +66,7 @@ unsigned short *proj_warpindex;
 bool *proj_warpindextag;
 MATPREC *proj_warpvalue;
 
+int back_maxnz;
 int *back_rowdispl;
 int *back_rowindex;
 int back_numblocks;
@@ -268,7 +270,7 @@ void preproc(){
     double rho = specll[specstart[myid]+tile].real()+0.5+raylocrho;
     double the = specll[specstart[myid]+tile].imag()+raylocthe*M_PI/numt;
     //GLOBAL SPECTRAL INDEX (EXTENDED)
-    int rhoglobalind = (int)(rho-rhostart);
+    int rhoglobalind = (int)((rho-rhostart));
     int theglobalind = (int)((the+(M_PI/numt)/2)/(M_PI/numt));
     rayglobalind[ind] = theglobalind*numrtile*specsize+rhoglobalind;
     if(theglobalind<numt && rhoglobalind<numr){
@@ -409,6 +411,7 @@ void preproc(){
   time = MPI_Wtime();
   if(myid==0)printf("\nCONSTRUCT PROJECTION MATRIX\n");
   {
+    int maxnz = 0;
     int *rownz = new int[raynumout];
     #pragma omp parallel for
     for(int k = 0; k < raynumout; k++){
@@ -426,7 +429,9 @@ void preproc(){
         if(domain[3] > ystart+numy*pixsize)domain[3]=ystart+numy*pixsize;
         findnumpix(theta,rho,&domain[0],&rownz[k]);
       }
+      if(rownz[k]>maxnz)maxnz=rownz[k];
     }
+    MPI_Allreduce(MPI_IN_PLACE,&maxnz,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
     int *rowdispl = new int[raynumout+1];
     rowdispl[0] = 0;
     for(int k = 1; k < raynumout+1; k++)
@@ -448,6 +453,7 @@ void preproc(){
       for(int p = 0; p < numproc; p++)
         printf("proc: %d rownztot: %d (%f GB)\n",p,rownztots[p],rownztots[p]/1024.0/1024.0/1024.0*(sizeof(MATPREC)+sizeof(int)));
         printf("rownztotmin: %d rownztotmax: %d imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc));
+        printf("rowmaxnz: %d\n",maxnz);
     }
     delete[] rownztots;
     int *rowindex = new int[rownztot];
@@ -471,6 +477,7 @@ void preproc(){
         start=start+pixtemp;
       }
     }
+    proj_maxnz = maxnz;
     proj_rownztot = rownztot;
     proj_rownzall = rownzall;
     proj_rowdispl = rowdispl;
@@ -502,8 +509,12 @@ void preproc(){
         inter[t*mynumpix+m] = inter[t*mynumpix+m]+inter[(t-1)*mynumpix+m];
     int *rowdispl = new int[mynumpix+1];
     rowdispl[0] = 0;
-    for(int m = 1; m < mynumpix+1; m++)
-      rowdispl[m] = rowdispl[m-1] + inter[numthreads*mynumpix+m-1];
+    int maxnz = 0;
+    for(int m = 1; m < mynumpix+1; m++){
+      int nz = inter[numthreads*mynumpix+m-1];
+      rowdispl[m] = rowdispl[m-1] + nz;
+      if(nz>maxnz)maxnz=nz;
+    }
     int rownztot = rowdispl[mynumpix];
     int *rowindex = new int[rownztot];
     #pragma omp parallel for
@@ -513,6 +524,9 @@ void preproc(){
     delete[] inter;
     delete[] intra;
     delete[] csrRowInd;
+    MPI_Allreduce(MPI_IN_PLACE,&maxnz,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
+    if(myid==0)printf("colmaxnz %d\n",maxnz);
+    back_maxnz = maxnz;
     back_rowdispl = rowdispl;
     back_rowindex = rowindex;
   }

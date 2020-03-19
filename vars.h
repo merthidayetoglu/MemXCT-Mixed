@@ -9,7 +9,7 @@
 #define FFACTOR 1 //FUSING FACTOR
 #define WARPSIZE 32 //WARPSIZE
 #define MATPREC half //MATRIX PRECISION
-#define VECPREC float //VECTOR PRECISION
+#define VECPREC half //VECTOR PRECISION
 
 using namespace std;
 
@@ -34,3 +34,4 @@ double max_kernel(double*,int);
 double dot_kernel(double*,double*,int);
 void copy_kernel(double*,double*,int);
 void saxpy_kernel(double*,double*,double,double*,int);
+void scale_kernel(double*,double,int);

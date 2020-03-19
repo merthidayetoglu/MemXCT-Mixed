@@ -32,7 +32,7 @@ int numbatch; //NUMBER OF BATCHES
 
 double xstart; //X START OF DOMAIN
 double ystart; //Y START OF DOMAIN
-double pixsize = 1; //PIXEL SIZE
+double pixsize = 1.0; //PIXEL SIZE
 double rhostart; //RHO START
 double raylength; //RAYLENGTH
 
@@ -109,8 +109,8 @@ int main(int argc, char** argv){
   numr = atoi(chartemp);
   chartemp = getenv("NUMX");
   numx = atoi(chartemp);
-  chartemp = getenv("NUMY");
-  numy = atoi(chartemp);
+  //chartemp = getenv("NUMY");
+  numy = numx;//atoi(chartemp);
   chartemp = getenv("NUMSLICE");
   numslice = atoi(chartemp);
   chartemp = getenv("BATCHSIZE");
@@ -118,8 +118,8 @@ int main(int argc, char** argv){
 
   chartemp = getenv("XSTART");
   xstart = atof(chartemp);
-  chartemp = getenv("YSTART");
-  ystart = atof(chartemp);
+  //chartemp = getenv("YSTART");
+  ystart = xstart;//atof(chartemp);
   chartemp = getenv("RHOSTART");
   rhostart = atof(chartemp);
 
@@ -259,6 +259,7 @@ int main(int argc, char** argv){
 
   setup_gpu(&obj_d,&gra_d,&dir_d,&mes_d,&res_d,&ray_d);
 
+  
   float *mesdata = new float[numt*numr*batchsize];
   float *recdata  = new float[numpix*batchsize];
   char recfile[1000];
@@ -287,6 +288,14 @@ int main(int argc, char** argv){
           else mes_h[slice*mynumray+k] = 0;
       cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
       cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
+      //NORMALIZE
+      extern int proj_maxnz;
+      extern int back_maxnz;
+      double mesmax = max_kernel(mes_h,mynumray*batchsize);
+      double raymax = mesmax*back_maxnz*sqrt(2)*numx*sqrt(2);
+      double scalefactor = 64e3/raymax;
+      if(myid==0)printf("maximum possible: %e scale factor: %e\n",raymax,scalefactor);
+      scale_kernel(mes_d,scalefactor,mynumray*batchsize);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
@@ -392,26 +401,27 @@ int main(int argc, char** argv){
     double pother = ptime-prtime-pktime-pmtime-pcstime-pcntime-pcrtime-pchtime;
     double bother = btime-brtime-bktime-bmtime-bcstime-bcntime-bcrtime-bchtime;
     printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pmtime,pcstime,pcntime,pchtime,prtime,pother,btime,bktime,bmtime,bcstime,bcntime,bchtime,prtime,bother);
-    double aggprojflop = proj_rownzall/1.0e9*2*numproj*numslice*numproc;
-    double aggbackflop = proj_rownzall/1.0e9*2*numback*numslice*numproc;
-    double aggflop = proj_rownzall/1.0e9*2*(numproj+numback)*numslice*numproc;
-    double aggprojflops = proj_rownzall/1.0e9*2*numproj/pktime*numslice*numproc;
-    double aggbackflops = proj_rownzall/1.0e9*2*numback/bktime*numslice*numproc;
-    double aggflops = proj_rownzall/1.0e9*2*(numproj+numback)/(pktime+bktime)*numslice*numproc;
+    printf("NUMBER OF PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
+    double aggprojflop = proj_rownzall/1.0e9*2*(2*numiter)*numslice;
+    double aggbackflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
+    double aggflop = aggprojflop+aggbackflop;
+    double aggprojflops = aggprojflop/pktime*numproc;
+    double aggbackflops = aggbackflop/bktime*numproc;
+    double aggflops = aggflop/(pktime+bktime)*numproc;
 
-    double aggprojshared = (proj_warpnzall*WARPSIZE+proj_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numproj*numslice*numproc;
-    double aggbackshared = (back_warpnzall*WARPSIZE+back_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numback*numslice*numproc;
-    double aggshared = ((back_warpnzall*WARPSIZE+back_mapnzall)*numback+(proj_warpnzall*WARPSIZE+proj_mapnzall)*numproj)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numslice*numproc;
-    double aggprojsharedbw = (proj_warpnzall*WARPSIZE+proj_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numproj/pktime*numslice*numproc;
-    double aggbacksharedbw = (back_warpnzall*WARPSIZE+back_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numback/bktime*numslice*numproc;
-    double aggsharedbw = ((back_warpnzall*WARPSIZE+back_mapnzall)*numback+(proj_warpnzall*WARPSIZE+proj_mapnzall)*numproj)*sizeof(VECPREC)/1024.0/1024.0/1024.0/(pktime+bktime)*numslice*numproc;
+    double aggprojshared = ((double)proj_warpnzall*WARPSIZE+proj_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numproj*FFACTOR;
+    double aggbackshared = ((double)back_warpnzall*WARPSIZE+back_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numback*FFACTOR;
+    double aggshared = aggprojshared+aggbackshared;
+    double aggprojsharedbw = aggprojshared/pktime*numproc;
+    double aggbacksharedbw = aggbackshared/bktime*numproc;
+    double aggsharedbw = aggshared/(pktime+bktime)*numproc;
 
-    double aggprojglobal = ((proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+raynumoutall*sizeof(VECPREC)+raynumoutall*sizeof(int))/1024.0/1024.0/1024.0*numproj*numslice*numproc;
-    double aggbackglobal = ((back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+numpix*sizeof(VECPREC)+noderayoutall*sizeof(int))/1024.0/1024.0/1024.0*numback*numslice*numproc;
-    double aggglobal = (((back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+numpix*sizeof(VECPREC)+noderayoutall*sizeof(int))*numback+((proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+raynumoutall*sizeof(VECPREC)+raynumoutall*sizeof(int))*numproj)/1024.0/1024.0/1024.0*numslice*numproc;
-    double aggprojglobalbw = ((proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+raynumoutall*sizeof(VECPREC)+raynumoutall*sizeof(int))/1024.0/1024.0/1024.0*numproj/pktime*numslice*numproc;
-    double aggbackglobalbw = ((back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+numpix*sizeof(VECPREC)+noderayoutall*sizeof(int))/1024.0/1024.0/1024.0*numback/bktime*numslice*numproc;
-    double aggglobalbw = (((back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+numpix*sizeof(VECPREC)+noderayoutall*sizeof(int))*numback+((proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*(sizeof(VECPREC)+sizeof(int)))/(double)FFACTOR+raynumoutall*sizeof(VECPREC)+raynumoutall*sizeof(int))*numproj)/1024.0/1024.0/1024.0/(pktime+bktime)*numslice*numproc;
+    double aggprojglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(VECPREC)+raynumoutall*(sizeof(VECPREC)+sizeof(int))+numray*sizeof(double)))/1024.0/1024.0/1024.0*numproj;
+    double aggbackglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*sizeof(VECPREC)+noderayoutall*(sizeof(VECPREC)+sizeof(int))+numpix*sizeof(double)))/1024.0/1024.0/1024.0*numback;
+    double aggglobal = aggprojglobal+aggbackglobal;
+    double aggprojglobalbw = aggprojglobal/pktime*numproc;
+    double aggbackglobalbw = aggbackglobal/bktime*numproc;
+    double aggglobalbw = (aggprojglobal+aggbackglobal)/(pktime+bktime)*numproc;
     printf("\n");
     printf("AGGREGATE pkernel %f bkernel %f agg %f TFLOPs\n",aggprojflop/1.0e3,aggbackflop/1.0e3,aggflop/1.0e3);
     printf("AGGREGATE pkernel %f bkernel %f agg %f TB GLOBAL\n",aggprojglobal/1024.0,aggbackglobal/1024.0,aggglobal/1024.0);
@@ -429,12 +439,23 @@ int main(int argc, char** argv){
     printf("PERGPU pkernel %f bkernel %f agg %f GB/s GLOBAL\n",aggprojglobalbw/numproc,aggbackglobalbw/numproc,aggglobalbw/numproc);
     printf("PERGPU pkernel %f bkernel %f agg %f GB/s SHARED\n",aggprojsharedbw/numproc,aggbacksharedbw/numproc,aggsharedbw/numproc);
     printf("\n");
-    double socket = 2.0*raynumoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*numslice;
-    double node = 2.0*socketrayoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*numslice;
-    double host = 2.0*noderayoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*numslice;
-    printf("PERPROC MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s MPI %f GB/s\n",host/(pmtime+bmtime),socket/(pcstime+bcstime),node/(pcntime+bcntime),host/(pchtime+bchtime));
-    //printf("PERSCKT MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s MPI %f GB/s\n",3*host/(pmtime+bmtime),3*socket/(pcstime+bcstime),3*node/(pcntime+bcntime),3*host/(pchtime+bchtime));
-    //printf("PERNODE MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s MPI %f GB/s\n",6*host/(pmtime+bmtime),6*socket/(pcstime+bcstime),6*node/(pcntime+bcntime),6*host/(pchtime+bchtime));
+    double socketdata = 2.0*raynumoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*FFACTOR;
+    double nodedata = 2.0*socketrayoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*FFACTOR;
+    double hostdata = 2.0*noderayoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*FFACTOR;
+    double socketbw = socketdata/(pcstime+bcstime)*numproc;
+    double nodebw = nodedata/(pcntime+bcntime)*numproc;
+    double hostbw = hostdata/(pchtime+bchtime)*numproc;
+    double memcpybw = hostdata/(pmtime+bmtime)*numproc;
+    printf("AGGREGATE MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata,socketdata,nodedata,hostdata);
+    printf("PERNODE MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata/numnode,socketdata/numnode,nodedata/numnode,hostdata/numnode);
+    printf("PERSCKT MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata/numsocket,socketdata/numsocket,nodedata/numsocket,hostdata/numsocket);
+    printf("PERGPU MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata/numproc,socketdata/numproc,nodedata/numproc,hostdata/numproc);
+    printf("\n");
+    printf("AGGREGATE MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw,socketbw,nodebw,hostbw);
+    printf("PERNODE MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numnode,socketbw/numnode,nodebw/numnode,hostbw/numnode);
+    printf("PERSCKT MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numsocket,socketbw/numsocket,nodebw/numsocket,hostbw/numsocket);
+    printf("PERGPU MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numproc,socketbw/numproc,nodebw/numproc,hostbw/numproc);
+    printf("\n");
   }
   float *mesall = new float[numray];
   #pragma omp parallel for

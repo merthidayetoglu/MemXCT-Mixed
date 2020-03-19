@@ -276,6 +276,7 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   projmem = projmem + sizeof(int)/1024.0/1024.0/1024.0*(proj_numbufftot*(proj_blocksize/WARPSIZE)+1);
   projmem = projmem + sizeof(unsigned short)/1024.0/1024.0/1024.0*(proj_warpnztot*WARPSIZE);
   projmem = projmem + sizeof(MATPREC)/1024.0/1024.0/1024.0*(proj_warpnztot*WARPSIZE);
+  projmem = projmem + sizeof(int)/1024.0/1024.0/1024.0*proj_mapnztot;
   //printf("PROC %d FORWARD PROJECTION MEMORY: %f GB\n",myid,projmem);
 
   cudaMalloc((void**)&proj_buffdispl_d,sizeof(int)*(proj_numblocks+1));
@@ -320,7 +321,7 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   double commems[numproc];
   MPI_Allgather(&gpumem,1,MPI_DOUBLE,gpumems,1,MPI_DOUBLE,MPI_COMM_WORLD);
   MPI_Allgather(&batchmem,1,MPI_DOUBLE,batchmems,1,MPI_DOUBLE,MPI_COMM_WORLD);
-  MPI_Allgather(&commem,1,MPI_DOUBLE,batchmems,1,MPI_DOUBLE,MPI_COMM_WORLD);
+  MPI_Allgather(&commem,1,MPI_DOUBLE,commems,1,MPI_DOUBLE,MPI_COMM_WORLD);
   if(myid==0){
     double gputotmem = 0.0;
     double batchtotmem = 0.0;
@@ -440,9 +441,9 @@ void projection(double *sino_d, double *tomo_d){
     prtime += milliseconds/1e3;
 
     MPI_Barrier(MPI_COMM_WORLD);
+    numproj++;
   }
   ptime += MPI_Wtime()-projectiontime;
-  numproj++;
 }
 
 void backproject(double *tomo_d, double *sino_d){
@@ -534,13 +535,14 @@ void backproject(double *tomo_d, double *sino_d){
     bktime += milliseconds/1e3;
 
     MPI_Barrier(MPI_COMM_WORLD);
+    numback++;
   }
   btime += MPI_Wtime()-backprojtime;
-  numback++;
 }
 __global__ void kernel_project(VECPREC *y, double *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *buffmap, int buffsize, int *packmap){
   extern __shared__ VECPREC shared[];
-  VECPREC acc[FFACTOR] = {0.0};
+  //VECPREC acc[FFACTOR] = {0.0};
+  float acc[FFACTOR] = {0.0};
   int wind = threadIdx.x%WARPSIZE;
   for(int buff = buffdispl[blockIdx.x]; buff < buffdispl[blockIdx.x+1]; buff++){
     int mapstr = mapdispl[buff];
@@ -554,9 +556,9 @@ __global__ void kernel_project(VECPREC *y, double *x, unsigned short *index, MAT
     int warp = (buff*blockDim.x+threadIdx.x)/WARPSIZE;
     for(int n = displ[warp]; n < displ[warp+1]; n++){
       unsigned short ind = index[n*WARPSIZE+wind];
-      MATPREC val = value[n*WARPSIZE+wind];
+      float val = __half2float(value[n*WARPSIZE+wind]);
       for(int f = 0; f < FFACTOR; f++)
-        acc[f] += shared[f*buffsize+ind]*__half2float(val);
+        acc[f] += __half2float(shared[f*buffsize+ind])*val;
     }
     __syncthreads();
   }
@@ -567,7 +569,8 @@ __global__ void kernel_project(VECPREC *y, double *x, unsigned short *index, MAT
 }
 __global__ void kernel_backproject(double *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *buffmap, int buffsize, int *packmap){
   extern __shared__ VECPREC shared[];
-  VECPREC acc[FFACTOR] = {0.0};
+  //VECPREC acc[FFACTOR] = {0.0};
+  float acc[FFACTOR] = {0.0};
   int wind = threadIdx.x%WARPSIZE;
   for(int buff = buffdispl[blockIdx.x]; buff < buffdispl[blockIdx.x+1]; buff++){
     int mapstr = mapdispl[buff];
@@ -581,9 +584,9 @@ __global__ void kernel_backproject(double *y, VECPREC *x, unsigned short *index,
     int warp = (buff*blockDim.x+threadIdx.x)/WARPSIZE;
     for(int n = displ[warp]; n < displ[warp+1]; n++){
       unsigned short ind = index[n*WARPSIZE+wind];
-      MATPREC val = value[n*WARPSIZE+wind];
+      float val = __half2float(value[n*WARPSIZE+wind]);
       for(int f = 0; f < FFACTOR; f++)
-        acc[f] += shared[f*buffsize+ind]*__half2float(val);
+        acc[f] += __half2float(shared[f*buffsize+ind])*val;
     }
     __syncthreads();
   }
@@ -594,12 +597,14 @@ __global__ void kernel_backproject(double *y, VECPREC *x, unsigned short *index,
 }
 __global__ void kernel_reduce(VECPREC *y, VECPREC *x, int *displ, int *index, int numrow, int numcol, int *packmap, int *unpackmap){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
-  VECPREC reduce[FFACTOR] = {0.0};
+  //VECPREC reduce[FFACTOR] = {0.0};
+  float reduce[FFACTOR] = {0.0};
   if(row < numrow){
     for(int n = displ[row]; n < displ[row+1]; n++){
       int ind = index[n];
       for(int f = 0; f < FFACTOR; f++)
-        reduce[f] += x[unpackmap[f*numcol+ind]];
+        //reduce[f] += x[unpackmap[f*numcol+ind]];
+        reduce[f] += __half2float(x[unpackmap[f*numcol+ind]]);
     }
     for(int f = 0; f < FFACTOR; f++)
       y[packmap[f*numrow+row]] = reduce[f];
@@ -607,12 +612,14 @@ __global__ void kernel_reduce(VECPREC *y, VECPREC *x, int *displ, int *index, in
 }
 __global__ void kernel_reducenopack(double *y, VECPREC *x, int *displ, int *index, int numrow, int numcol, int *unpackmap){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
-  VECPREC reduce[FFACTOR] = {0.0};
+  //VECPREC reduce[FFACTOR] = {0.0};
+  float reduce[FFACTOR] = {0.0};
   if(row < numrow){
     for(int n = displ[row]; n < displ[row+1]; n++){
       int ind = index[n];
       for(int f = 0; f < FFACTOR; f++)
-        reduce[f] += x[unpackmap[f*numcol+ind]];
+        //reduce[f] += x[unpackmap[f*numcol+ind]];
+        reduce[f] += __half2float(x[unpackmap[f*numcol+ind]]);
     }
     for(int f = 0; f < FFACTOR; f++)
       y[f*numrow+row] = reduce[f];
@@ -654,4 +661,12 @@ __global__ void kernel_saxpy(double *a, double *b, double coef, double *c, int d
 };
 void saxpy_kernel(double *a, double *b, double coef, double *c, int dim){
   kernel_saxpy<<<(dim+255)/256,256>>>(a,b,coef,c,dim);
+};
+__global__ void kernel_scale(double *a,  double coef, int dim){
+  int tid = blockIdx.x*blockDim.x+threadIdx.x;
+  if(tid < dim)
+    a[tid] = coef*a[tid];
+};
+void scale_kernel(double *a, double coef, int dim){
+  kernel_scale<<<(dim+255)/256,256>>>(a,coef,dim);
 };
