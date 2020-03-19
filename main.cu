@@ -255,7 +255,7 @@ int main(int argc, char** argv){
   double *dir_d;//DIRECTION
   double *mes_d;//MEASUREMENT
   double *ray_d;//RAYSUM
-  double *res_d;//RESIDUAL ERRORKEK
+  double *res_d;//RESIDUE
 
   setup_gpu(&obj_d,&gra_d,&dir_d,&mes_d,&res_d,&ray_d);
 
@@ -264,21 +264,21 @@ int main(int argc, char** argv){
   char recfile[1000];
   sprintf(recfile,"%s_rec",sinfile);
   if(myid==0)printf("RECONSTRUCTION FILE: %s\n",recfile);
-  FILE *mesf;
-  FILE *recf;
-  if(myid==0)mesf = fopen(sinfile,"rb");
-  if(myid==0)recf = fopen(recfile,"wb");
+  FILE *inputf;
+  FILE *outputf;
+  if(myid==0)inputf = fopen(sinfile,"rb");
+  if(myid==0)outputf = fopen(recfile,"wb");
   if(myid==0)printf("CONJUGATE-GRADIENT OPTIMIZATION\n");
   MPI_Barrier(MPI_COMM_WORLD);
   double time = 0;
   rtime = MPI_Wtime();
   for(int batch = 0; batch < numbatch; batch++){
     if(myid==0)printf("BATCH %d\n",batch);
-    //READ SLICE
+    //READ BATCH
     MPI_Barrier(MPI_COMM_WORLD);
     time = MPI_Wtime();
     {
-      if(myid==0)fread(mesdata,sizeof(float),numr*numt*batchsize,mesf);
+      if(myid==0)fread(mesdata,sizeof(float),numr*numt*batchsize,inputf);
       MPI_Bcast(mesdata,numr*numt*batchsize,MPI_DOUBLE,0,MPI_COMM_WORLD);
       for(int slice = 0; slice < batchsize; slice++)
         #pragma omp parallel for
@@ -307,7 +307,7 @@ int main(int argc, char** argv){
     //START ITERATIONS
     for(int iter = 1; iter <= numiter; iter++){
       //PROJECT DIRECTION
-      projection(ray_d,gra_d);
+      projection(ray_d,dir_d);
       cudaMemcpy(ray_h,ray_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       cudaMemcpy(res_h,res_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       //FIND STEP SIZE
@@ -359,8 +359,8 @@ int main(int argc, char** argv){
     iotime += MPI_Wtime()-time;
   }
   rtime = MPI_Wtime()-rtime;
-  if(myid==0)fclose(mesf);
-  if(myid==0)fclose(recf);
+  if(myid==0)fclose(inputf);
+  if(myid==0)fclose(outputf);
 
   if(myid==0){
     double cgtime = rtime-ptime-btime-iotime;
