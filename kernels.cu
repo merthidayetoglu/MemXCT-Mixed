@@ -201,6 +201,13 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   }
 
   //CONJUGATE-GRADIENT BUFFERS
+  double batchmem = 0.0;
+  batchmem += sizeof(double)*mynumpix*batchsize/1024.0/1024.0/1024.0;
+  batchmem += sizeof(double)*mynumpix*batchsize/1024.0/1024.0/1024.0;
+  batchmem += sizeof(double)*mynumpix*batchsize/1024.0/1024.0/1024.0;
+  batchmem += sizeof(double)*mynumray*batchsize/1024.0/1024.0/1024.0;
+  batchmem += sizeof(double)*mynumray*batchsize/1024.0/1024.0/1024.0;
+  batchmem += sizeof(double)*mynumray*batchsize/1024.0/1024.0/1024.0;
   cudaMallocHost((void**)obj,sizeof(double)*mynumpix*batchsize);
   cudaMallocHost((void**)gra,sizeof(double)*mynumpix*batchsize);
   cudaMallocHost((void**)dir,sizeof(double)*mynumpix*batchsize);
@@ -208,6 +215,13 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   cudaMallocHost((void**)res,sizeof(double)*mynumray*batchsize);
   cudaMallocHost((void**)ray,sizeof(double)*mynumray*batchsize);
   //COMMUNICATION BUFFERS
+  double commem = 0.0;
+  commem += sizeof(VECPREC)*socketsendcommdispl[numproc_socket]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(VECPREC)*socketrecvcommdispl[numproc_socket]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(VECPREC)*nodesendcommdispl[numproc_node]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(VECPREC)*noderecvcommdispl[numproc_node]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(VECPREC)*nodereduceoutdispl[numproc]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(VECPREC)*nodereduceincdispl[numproc]*FFACTOR/1024.0/1024.0/1024.0;
   cudaMalloc((void**)&socketreducesendbuff_d,sizeof(VECPREC)*socketsendcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&socketreducerecvbuff_d,sizeof(VECPREC)*socketrecvcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&nodereducesendbuff_d,sizeof(VECPREC)*nodesendcommdispl[numproc_node]*FFACTOR);
@@ -215,6 +229,18 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   cudaMalloc((void**)&nodesendbuff_d,sizeof(VECPREC)*nodereduceoutdispl[numproc]*FFACTOR);
   cudaMalloc((void**)&noderecvbuff_d,sizeof(VECPREC)*nodereduceincdispl[numproc]*FFACTOR);
   //PACK AND UNPACK MAPS
+  commem += sizeof(int)*socketsendcommdispl[numproc_socket]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*socketrecvcommdispl[numproc_socket]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*(socketreduceoutdispl[numproc]+1)/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*socketreducedispl[socketreduceoutdispl[numproc]]/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*socketreduceoutdispl[numproc]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*noderecvcommdispl[numproc_node]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*(nodereduceoutdispl[numproc]+1)/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*nodereducedispl[nodereduceoutdispl[numproc]]/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*nodereduceoutdispl[numproc]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*nodereduceincdispl[numproc]*FFACTOR/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*(mynumray+1)/1024.0/1024.0/1024.0;
+  commem += sizeof(int)*noderaydispl[mynumray]/1024.0/1024.0/1024.0;
   cudaMalloc((void**)&socketpackmap_d,sizeof(int)*socketsendcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&socketunpackmap_d,sizeof(int)*socketrecvcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&socketreducedispl_d,sizeof(int)*(socketreduceoutdispl[numproc]+1));
@@ -243,7 +269,7 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   cudaMallocHost((void**)&nodesendbuff_h,sizeof(VECPREC)*nodereduceoutdispl[numproc]*FFACTOR);
   cudaMallocHost((void**)&noderecvbuff_h,sizeof(VECPREC)*nodereduceincdispl[numproc]*FFACTOR);
 
-  double projmem = 0;
+  double projmem = 0.0;
   projmem = projmem + sizeof(int)/1024.0/1024.0/1024.0*(proj_numblocks+1);
   projmem = projmem + sizeof(int)/1024.0/1024.0/1024.0*(proj_numbufftot+1);
   projmem = projmem + sizeof(int)/1024.0/1024.0/1024.0*proj_mapnztot;
@@ -278,7 +304,7 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   cudaMemcpy(back_warpindex_d,back_warpindex,sizeof(unsigned short)*back_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
   cudaMemcpy(back_warpvalue_d,back_warpvalue,sizeof(MATPREC)*back_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
 
-  double backmem = 0;
+  double backmem = 0.0;
   backmem = backmem + sizeof(int)/1024.0/1024.0/1024.0*(back_numblocks+1);
   backmem = backmem + sizeof(int)/1024.0/1024.0/1024.0*(back_numbufftot+1);
   backmem = backmem + sizeof(int)/1024.0/1024.0/1024.0*back_mapnztot;
@@ -289,17 +315,24 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   //printf("PROC %d BACKPROJECTION MEMORY: %f GB\n",myid,backmem);
 
   double gpumem = projmem+backmem;
-  double batchmem = 1/1024.0/1024.0/1024.0*(raynumout+raynuminc+mynumpix+mynumray)*batchsize*sizeof(VECPREC);
-  double *gpumems = new double[numproc];
-  double *batchmems = new double[numproc];
+  double gpumems[numproc];
+  double batchmems[numproc];
+  double commems[numproc];
   MPI_Allgather(&gpumem,1,MPI_DOUBLE,gpumems,1,MPI_DOUBLE,MPI_COMM_WORLD);
   MPI_Allgather(&batchmem,1,MPI_DOUBLE,batchmems,1,MPI_DOUBLE,MPI_COMM_WORLD);
+  MPI_Allgather(&commem,1,MPI_DOUBLE,batchmems,1,MPI_DOUBLE,MPI_COMM_WORLD);
   if(myid==0){
-    for(int p = 0; p < numproc; p++)
-      printf("PROC %d TOTAL GPU MEMORY: %f GB + %f GB = %f GB\n",p,gpumems[p],batchmems[p],gpumems[p]+batchmems[p]);
+    double gputotmem = 0.0;
+    double batchtotmem = 0.0;
+    double commtotmem = 0.0;
+    for(int p = 0; p < numproc; p++){
+      printf("PROC %d GPU MEMORY: %f GB + %f GB + %f GB = %f GB\n",p,gpumems[p],batchmems[p],commems[p],gpumems[p]+batchmems[p]+commems[p]);
+      gputotmem += gpumems[p];
+      batchtotmem += batchmems[p];
+      commtotmem += commems[p];
+    }
+    printf("TOTAL GPU MEMORY %f GB + %f GB + %f GB = %f GB\n",gputotmem,batchtotmem,commtotmem,gputotmem+batchtotmem+commtotmem);
   }
-  delete[] gpumems;
-  delete[] batchmems;
 
   cudaFuncSetAttribute(kernel_project,cudaFuncAttributeMaxDynamicSharedMemorySize,98304);
   cudaFuncSetAttribute(kernel_backproject,cudaFuncAttributeMaxDynamicSharedMemorySize,98304);
