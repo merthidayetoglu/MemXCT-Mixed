@@ -141,6 +141,7 @@ int main(int argc, char** argv){
   back_buffsize = atoi(chartemp);
 
   sinfile = getenv("SINFILE");
+  thefile = getenv("THEFILE");
   chartemp = getenv("PROCPERNODE");
   numproc_node = atoi(chartemp);
   chartemp = getenv("PROCPERSOCKET");
@@ -280,7 +281,7 @@ int main(int argc, char** argv){
     time = MPI_Wtime();
     {
       if(myid==0)fread(mesdata,sizeof(float),numr*numt*batchsize,inputf);
-      MPI_Bcast(mesdata,numr*numt*batchsize,MPI_DOUBLE,0,MPI_COMM_WORLD);
+      MPI_Bcast(mesdata,numr*numt*batchsize,MPI_FLOAT,0,MPI_COMM_WORLD);
       for(int slice = 0; slice < batchsize; slice++)
         #pragma omp parallel for
         for(int k = 0; k < mynumray; k++)

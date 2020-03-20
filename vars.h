@@ -6,10 +6,10 @@
 #include <omp.h>
 #include "mma.h"
 
-#define FFACTOR 1 //FUSING FACTOR
+#define FFACTOR 10 //FUSING FACTOR
 #define WARPSIZE 32 //WARPSIZE
-#define MATPREC half //MATRIX PRECISION
-#define VECPREC half //VECTOR PRECISION
+#define MATPREC float //MATRIX PRECISION
+#define VECPREC float //VECTOR PRECISION
 
 using namespace std;
 

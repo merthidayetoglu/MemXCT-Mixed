@@ -251,11 +251,12 @@ void preproc(){
     int yglobalind = (int)((y-ystart)/pixsize);
     pixglobalind[ind] = yglobalind*numxtile*spatsize+xglobalind;
   }
-  /*double *mestheta = new double[numt];
+  float *mestheta = new float[numt];
   if(myid==0)printf("INPUT THETA DATA\n");
-  FILE *thetaf = fopen("brain-2x-5000-5001.1s.theta.4501.data","rb");
-  fread(mestheta,sizeof(double),numt,thetaf);
-  fclose(thetaf);*/
+  extern char *thefile;
+  FILE *thetaf = fopen(thefile,"rb");
+  fread(mestheta,sizeof(float),numt,thetaf);
+  fclose(thetaf);
   //PLACE RAYS
   raycoor = new complex<double>[mynumray];
   rayglobalind = new int[mynumray];
@@ -275,8 +276,8 @@ void preproc(){
     rayglobalind[ind] = theglobalind*numrtile*specsize+rhoglobalind;
     if(theglobalind<numt && rhoglobalind<numr){
       raymesind[ind] = theglobalind*numr+rhoglobalind;
-      //raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
-      raycoor[ind] = complex<double>(rho,the);
+      raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
+      //raycoor[ind] = complex<double>(rho,the);
     }
     else{
       raycoor[ind].real(5*raylength);
