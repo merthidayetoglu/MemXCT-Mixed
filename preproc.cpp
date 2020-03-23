@@ -450,9 +450,9 @@ void preproc(){
       if(rownztotmax<rownztots[p])rownztotmax=rownztots[p];
     }
     if(myid==0){
-      printf("CSR STORAGE: %ld (%f GB)\n",rownzall,rownzall*(sizeof(MATPREC)+sizeof(int))/1024.0/1024.0/1024.0);
+      printf("CSR STORAGE: %ld (%f GB)\n",rownzall,rownzall*(sizeof(MATPREC)+sizeof(int))/1.0e9);
       for(int p = 0; p < numproc; p++)
-        printf("proc: %d rownztot: %d (%f GB)\n",p,rownztots[p],rownztots[p]/1024.0/1024.0/1024.0*(sizeof(MATPREC)+sizeof(int)));
+        printf("proc: %d rownztot: %d (%f GB)\n",p,rownztots[p],rownztots[p]/1.0e9*(sizeof(MATPREC)+sizeof(int)));
         printf("rownztotmin: %d rownztotmax: %d imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc));
         printf("rowmaxnz: %d\n",maxnz);
     }
@@ -544,7 +544,7 @@ void preproc(){
     if(raynumout%blocksize)numblocks++;
     int numblocksall = numblocks;
     MPI_Allreduce(MPI_IN_PLACE,&numblocksall,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
-    if(myid==0)printf("TOTAL NUMBER OF BLOCKS: %d BUFFSIZE: %d (%d KB)\n",numblocksall,buffsize,buffsize*(int)sizeof(double)/1024);
+    if(myid==0)printf("TOTAL NUMBER OF BLOCKS: %d BUFFSIZE: %d (%f KB)\n",numblocksall,buffsize,buffsize*sizeof(VECPREC)/1.0e3);
     int *numbuff = new int[numblocks];
     #pragma omp parallel
     {
@@ -613,7 +613,7 @@ void preproc(){
     int mapnztot = mapdispl[numbufftot];
     long mapnzall = mapnztot;
     MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    if(myid==0)printf("BUFF MAP: %ld (%f GB) DATA REUSE: %f\n",mapnzall,mapnzall/1024.0/1024.0/1024.0*sizeof(int),proj_rownzall/(double)mapnzall);
+    if(myid==0)printf("BUFF MAP: %ld (%f GB) DATA REUSE: %f\n",mapnzall,mapnzall/1.0e9*sizeof(int),proj_rownzall/(double)mapnzall);
     int numwarp = blocksize/WARPSIZE*numbufftot;
     long numwarpall = numwarp;
     MPI_Allreduce(MPI_IN_PLACE,&numwarpall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
@@ -679,9 +679,9 @@ void preproc(){
       if(warpnztotmax<warpnztots[p])warpnztotmax=warpnztots[p];
     }
     if(myid==0){
-      printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1024.0/1024.0/1024.0,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
+      printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1.0e9,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
       for(int p = 0; p < numproc; p++)
-        printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1024.0/1024.0/1024.0*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
+        printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
       printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc));
     }
     delete[] warpnztots;
@@ -759,7 +759,7 @@ void preproc(){
     if(mynumpix%blocksize)numblocks++;
     int numblocksall = numblocks;
     MPI_Allreduce(MPI_IN_PLACE,&numblocksall,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD);
-    if(myid==0)printf("TOTAL NUMBER OF BLOCKS: %d BUFFSIZE: %d (%d KB)\n",numblocksall,buffsize,buffsize*(int)sizeof(double)/1024);
+    if(myid==0)printf("TOTAL NUMBER OF BLOCKS: %d BUFFSIZE: %d (%f KB)\n",numblocksall,buffsize,buffsize*sizeof(VECPREC)/1.0e3);
     int *numbuff = new int[numblocks];
     #pragma omp parallel
     {
@@ -828,7 +828,7 @@ void preproc(){
     int mapnztot = mapdispl[numbufftot];
     long mapnzall = mapnztot;
     MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    if(myid==0)printf("BUFF MAP: %ld (%f GB) DATA REUSE: %f\n",mapnzall,mapnzall/1024.0/1024.0/1024.0*sizeof(int),proj_rownzall/(double)mapnzall);
+    if(myid==0)printf("BUFF MAP: %ld (%f GB) DATA REUSE: %f\n",mapnzall,mapnzall/1.0e9*sizeof(int),proj_rownzall/(double)mapnzall);
     int numwarp = blocksize/WARPSIZE*numbufftot;
     long numwarpall = numwarp;
     MPI_Allreduce(MPI_IN_PLACE,&numwarpall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
@@ -894,9 +894,9 @@ void preproc(){
       if(warpnztotmax<warpnztots[p])warpnztotmax=warpnztots[p];
     }
     if(myid==0){
-      printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1024.0/1024.0/1024.0,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
+      printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1.0e9,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
       for(int p = 0; p < numproc; p++)
-        printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1024.0/1024.0/1024.0*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
+        printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
       printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc));
     }
     delete[] warpnztots;

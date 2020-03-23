@@ -198,7 +198,7 @@ int main(int argc, char** argv){
     printf("  NUMBER OF RAYS (THE x RHO): %d (%d x %d)\n",numt*numr,numt,numr);
     printf("    NUMBER OF PIXELS (X x Y): %d (%d x %d)\n",numx*numy,numx,numy);
     printf("         NUM. SLICES (B x S): %d (%d x %d)\n",numslice,numbatch,batchsize);
-    printf("                  BATCH SIZE: %d (%f + %f GB) %d FUSE FACTOR\n",batchsize,numr*numt*batchsize*sizeof(VECPREC)/1024.0/1024.0/1024.0,numx*numy*batchsize*sizeof(VECPREC)/1024.0/1024.0/1024.0,FFACTOR);
+    printf("                  BATCH SIZE: %d (%f + %f GB) %d FUSE FACTOR\n",batchsize,numr*numt*batchsize*sizeof(VECPREC)/1.0e9,numx*numy*batchsize*sizeof(VECPREC)/1.0e9,FFACTOR);
     printf("\n");
     printf("     SPATIAL / SPECTRAL  TILE SIZE: %d (%d x %d) / %d (%d x %d)\n",spatsize*spatsize,spatsize,spatsize,specsize*specsize,specsize,specsize);
     printf("NUMBER OF SPATIAL / SPECTRAL TILES: %d (%d x %d) / %d (%d x %d)\n",numspattile,numxtile,numytile,numspectile,numttile,numrtile);
@@ -209,13 +209,13 @@ int main(int argc, char** argv){
     printf("\n");
     printf("             BLOCK SIZE : %d / %d\n",proj_blocksize,back_blocksize);
     printf("NUM. BLOCKS (PER PROC.) : %d (%d) / %d (%d)\n",numray/proj_blocksize,numray/proj_blocksize/numproc,numpix/back_blocksize,numpix/back_blocksize/numproc);
-    printf("            BUFFER SIZE : %d (%f KB) / %d (%f KB)\n",proj_buffsize,proj_buffsize*(int)sizeof(VECPREC)/1024.0,back_buffsize,back_buffsize*(int)sizeof(VECPREC)/1024.0);
+    printf("            BUFFER SIZE : %d (%f KB) / %d (%f KB)\n",proj_buffsize,proj_buffsize*sizeof(VECPREC)/1024.0,back_buffsize,back_buffsize*sizeof(VECPREC)/1024.0);
   }
   proj_buffsize = proj_buffsize/FFACTOR;
   back_buffsize = back_buffsize/FFACTOR;
   if(myid==0){
-    printf("  EFFECTIVE BUFFER SIZE : %d (%f KB) / %d (%f KB)\n",proj_buffsize*FFACTOR,proj_buffsize*(int)sizeof(VECPREC)/1024.0*FFACTOR,back_buffsize*FFACTOR,back_buffsize*(int)sizeof(VECPREC)/1024.0*FFACTOR);
-    printf("   BUFFER SIZE PER SLICE: %d (%f KB) / %d (%f KB)\n",proj_buffsize,proj_buffsize*(int)sizeof(VECPREC)/1024.0,back_buffsize,back_buffsize*(int)sizeof(VECPREC)/1024.0);
+    printf("  EFFECTIVE BUFFER SIZE : %d (%f KB) / %d (%f KB)\n",proj_buffsize*FFACTOR,proj_buffsize*(int)sizeof(VECPREC)/1024.0*FFACTOR,back_buffsize*FFACTOR,back_buffsize*sizeof(VECPREC)/1024.0*FFACTOR);
+    printf("   BUFFER SIZE PER SLICE: %d (%f KB) / %d (%f KB)\n",proj_buffsize,proj_buffsize*(int)sizeof(VECPREC)/1024.0,back_buffsize,back_buffsize*sizeof(VECPREC)/1024.0);
     printf("\n");
     printf("INTEGER: %d, DOUBLE: %d, LONG: %d, SHORT: %d, POINTER: %d\n",(int)sizeof(int),(int)sizeof(double),(int)sizeof(long),(int)sizeof(unsigned short),(int)sizeof(complex<double>*));
     printf("\n");
@@ -280,12 +280,12 @@ int main(int argc, char** argv){
     MPI_Barrier(MPI_COMM_WORLD);
     time = MPI_Wtime();
     {
-      if(myid==0)fread(mesdata,sizeof(float),numr*numt*batchsize,inputf);
-      MPI_Bcast(mesdata,numr*numt*batchsize,MPI_FLOAT,0,MPI_COMM_WORLD);
+      if(myid==0)fread(mesdata,sizeof(float),numr*numt,inputf);
+      MPI_Bcast(mesdata,numr*numt,MPI_FLOAT,0,MPI_COMM_WORLD);
       for(int slice = 0; slice < batchsize; slice++)
         #pragma omp parallel for
         for(int k = 0; k < mynumray; k++)
-          if(raymesind[k]>-1)mes_h[slice*mynumray+k] = mesdata[slice*numt*numr+raymesind[k]];
+          if(raymesind[k]>-1)mes_h[slice*mynumray+k] = mesdata[raymesind[k]];
           else mes_h[slice*mynumray+k] = 0;
       cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
       cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
@@ -352,18 +352,18 @@ int main(int argc, char** argv){
     MPI_Barrier(MPI_COMM_WORLD);
     time = MPI_Wtime();
     {
-      /*#pragma omp parallel for
-      for(int n = 0; n < numpix*batchsize; n++)
-        recdata[n] = 0;
-      for(int slice = 0; slice < batchsize; slice++)
-        #pragma omp parallel for
-        for(int n = 0; n < mynumpix; n++)
-          recdata[slice*numpix+pixglobalind[n]] = obj_h[slice*mynumpix+n];
-      if(myid==0)
-        MPI_Reduce(MPI_IN_PLACE,recdata,numpix*batchsize,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-      else
-        MPI_Reduce(recdata,recdata,numpix*batchsize,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-      if(myid==0)fwrite(recdata,sizeof(double),numpix*batchsize,recf);*/
+      //#pragma omp parallel for
+      //for(int n = 0; n < numpix*batchsize; n++)
+      //  recdata[n] = 0;
+      //for(int slice = 0; slice < batchsize; slice++)
+      //  #pragma omp parallel for
+      //  for(int n = 0; n < mynumpix; n++)
+      //    recdata[slice*numpix+pixglobalind[n]] = obj_h[slice*mynumpix+n];
+      //if(myid==0)
+      //  MPI_Reduce(MPI_IN_PLACE,recdata,numpix*batchsize,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+      //else
+      //  MPI_Reduce(recdata,recdata,numpix*batchsize,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+      //if(myid==0)fwrite(recdata,sizeof(double),numpix*batchsize,recf);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
@@ -403,46 +403,52 @@ int main(int argc, char** argv){
     double bother = btime-brtime-bktime-bmtime-bcstime-bcntime-bcrtime-bchtime;
     printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pmtime,pcstime,pcntime,pchtime,prtime,pother,btime,bktime,bmtime,bcstime,bcntime,bchtime,prtime,bother);
     printf("NUMBER OF PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
-    double aggprojflop = proj_rownzall/1.0e9*2*(2*numiter)*numslice;
-    double aggbackflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
-    double aggflop = aggprojflop+aggbackflop;
-    double aggprojflops = aggprojflop/pktime*numproc;
-    double aggbackflops = aggbackflop/bktime*numproc;
-    double aggflops = aggflop/(pktime+bktime)*numproc;
+    double projflop = proj_rownzall/1.0e9*2*(2*numiter)*numslice;
+    double backflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
+    double flop = projflop+backflop;
+    double projflopreal = (proj_warpnzall*WARPSIZE)/1.0e9*2*(2*numiter)*numslice;
+    double backflopreal = (back_warpnzall*WARPSIZE)/1.0e9*2*(numiter+1)*numslice;
+    double flopreal = projflopreal+backflopreal;
+    double projflops = projflop/pktime*numproc;
+    double backflops = backflop/bktime*numproc;
+    double flops = flop/(pktime+bktime)*numproc;
+    double projflopsreal = projflopreal/pktime*numproc;
+    double backflopsreal = backflopreal/bktime*numproc;
+    double flopsreal = flopreal/(pktime+bktime)*numproc;
 
-    double aggprojshared = ((double)proj_warpnzall*WARPSIZE+proj_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numproj*FFACTOR;
-    double aggbackshared = ((double)back_warpnzall*WARPSIZE+back_mapnzall)*sizeof(VECPREC)/1024.0/1024.0/1024.0*numback*FFACTOR;
-    double aggshared = aggprojshared+aggbackshared;
-    double aggprojsharedbw = aggprojshared/pktime*numproc;
-    double aggbacksharedbw = aggbackshared/bktime*numproc;
-    double aggsharedbw = aggshared/(pktime+bktime)*numproc;
+    double projshared = ((double)proj_warpnzall*WARPSIZE+proj_mapnzall)*sizeof(VECPREC)/1.0e9*numproj*FFACTOR;
+    double backshared = ((double)back_warpnzall*WARPSIZE+back_mapnzall)*sizeof(VECPREC)/1.0e9*numback*FFACTOR;
+    double shared = projshared+backshared;
+    double projsharedbw = projshared/pktime*numproc;
+    double backsharedbw = backshared/bktime*numproc;
+    double sharedbw = shared/(pktime+bktime)*numproc;
 
-    double aggprojglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(VECPREC)+raynumoutall*(sizeof(VECPREC)+sizeof(int))+numray*sizeof(double)))/1024.0/1024.0/1024.0*numproj;
-    double aggbackglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*sizeof(VECPREC)+noderayoutall*(sizeof(VECPREC)+sizeof(int))+numpix*sizeof(double)))/1024.0/1024.0/1024.0*numback;
-    double aggglobal = aggprojglobal+aggbackglobal;
-    double aggprojglobalbw = aggprojglobal/pktime*numproc;
-    double aggbackglobalbw = aggbackglobal/bktime*numproc;
-    double aggglobalbw = (aggprojglobal+aggbackglobal)/(pktime+bktime)*numproc;
+    double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(VECPREC)+raynumoutall*(sizeof(VECPREC)+sizeof(int))+numray*sizeof(double)))/1.0e9*numproj;
+    double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*sizeof(VECPREC)+noderayoutall*(sizeof(VECPREC)+sizeof(int))+numpix*sizeof(double)))/1.0e9*numback;
+    double global = projglobal+backglobal;
+    double projglobalbw = projglobal/pktime*numproc;
+    double backglobalbw = backglobal/bktime*numproc;
+    double globalbw = (projglobal+backglobal)/(pktime+bktime)*numproc;
     printf("\n");
-    printf("AGGREGATE pkernel %f bkernel %f agg %f TFLOPs\n",aggprojflop/1.0e3,aggbackflop/1.0e3,aggflop/1.0e3);
-    printf("AGGREGATE pkernel %f bkernel %f agg %f TB GLOBAL\n",aggprojglobal/1024.0,aggbackglobal/1024.0,aggglobal/1024.0);
-    printf("AGGREGATE pkernel %f bkernel %f agg %f TB SHARED\n",aggprojshared/1024.0,aggbackshared/1024.0,aggshared/1024.0);
+    printf("AGGREGATE pkernel %f (%f) bkernel %f (%f) agg %f (%f) TFLOPs\n",projflopreal/1.0e3,projflop/1.0e3,backflopreal/1.0e3,backflop/1.0e3,flopreal/1.0e3,flop/1.0e3);
+    printf("AGGREGATE pkernel %f bkernel %f agg %f TB GLOBAL\n",projglobal/1.0e3,backglobal/1.0e3,global/1.0e3);
+    printf("AGGREGATE pkernel %f bkernel %f agg %f TB SHARED\n",projshared/1.0e3,backshared/1.0e3,shared/1.0e3);
     printf("\n");
-    //printf("PERGPU pkernel %f bkernel %f agg %f GFLOPS\n",aggprojflop/numproc,aggbackflop/numproc,aggflop/numproc);
-    //printf("PERGPU pkernel %f bkernel %f agg %f GB/s GLOBAL\n",aggprojglobal/numproc,aggbackglobal/numproc,aggglobal/numproc);
-    //printf("PERGPU pkernel %f bkernel %f agg %f GB/s SHARED\n",aggprojshared/numproc,aggbackshared/numproc,aggshared/numproc);
-    //printf("\n");
-    printf("AGGREGATE pkernel %f bkernel %f agg %f TFLOPS\n",aggprojflops/1.0e3,aggbackflops/1.0e3,aggflops/1.0e3);
-    printf("AGGREGATE pkernel %f bkernel %f agg %f TB/s GLOBAL\n",aggprojglobalbw/1024.0,aggbackglobalbw/1024.0,aggglobalbw/1024.0);
-    printf("AGGREGATE pkernel %f bkernel %f agg %f TB/s SHARED\n",aggprojsharedbw/1024.0,aggbacksharedbw/1024.0,aggsharedbw/1024.0);
+    printf("PERGPU pkernel %f (%f) bkernel %f (%f) agg %f (%f) GFLOPs\n",projflopreal/numproc,projflop/numproc,backflopreal/numproc,backflop/numproc,flopreal/numproc,flop/numproc);
+    printf("PERGPU pkernel %f bkernel %f agg %f GB GLOBAL\n",projglobal/numproc,backglobal/numproc,global/numproc);
+    printf("PERGPU pkernel %f bkernel %f agg %f GB SHARED\n",projshared/numproc,backshared/numproc,shared/numproc);
     printf("\n");
-    printf("PERGPU pkernel %f bkernel %f agg %f GFLOPS\n",aggprojflops/numproc,aggbackflops/numproc,aggflops/numproc);
-    printf("PERGPU pkernel %f bkernel %f agg %f GB/s GLOBAL\n",aggprojglobalbw/numproc,aggbackglobalbw/numproc,aggglobalbw/numproc);
-    printf("PERGPU pkernel %f bkernel %f agg %f GB/s SHARED\n",aggprojsharedbw/numproc,aggbacksharedbw/numproc,aggsharedbw/numproc);
+    printf("AGGREGATE pkernel %f (%f) bkernel %f (%f) agg %f (%f) TFLOPS\n",projflopsreal/1.0e3,projflops/1.0e3,backflopsreal/1.0e3,backflops/1.0e3,flopsreal/1.0e3,flops/1.0e3);
+    printf("AGGREGATE pkernel %f bkernel %f agg %f TB/s GLOBAL\n",projglobalbw/1.0e3,backglobalbw/1.0e3,globalbw/1.0e3);
+    printf("AGGREGATE pkernel %f bkernel %f agg %f TB/s SHARED\n",projsharedbw/1.0e3,backsharedbw/1.0e3,sharedbw/1.0e3);
     printf("\n");
-    double socketdata = 2.0*raynumoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*FFACTOR;
-    double nodedata = 2.0*socketrayoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*FFACTOR;
-    double hostdata = 2.0*noderayoutall*sizeof(VECPREC)*(numproj+numback)/1024.0/1024.0/1024.0*FFACTOR;
+    printf("PERGPU pkernel %f (%f) bkernel %f (%f) agg %f (%f) GFLOPS\n",projflopsreal/numproc,projflops/numproc,backflopsreal/numproc,backflops/numproc,flopsreal/numproc,flops/numproc);
+    printf("PERGPU pkernel %f bkernel %f agg %f GB/s GLOBAL\n",projglobalbw/numproc,backglobalbw/numproc,globalbw/numproc);
+    printf("PERGPU pkernel %f bkernel %f agg %f GB/s SHARED\n",projsharedbw/numproc,backsharedbw/numproc,sharedbw/numproc);
+    printf("\n");
+    double socketdata = 2.0*raynumoutall*sizeof(VECPREC)*(numproj+numback)/1.0e9*FFACTOR;
+    double nodedata = 2.0*socketrayoutall*sizeof(VECPREC)*(numproj+numback)/1.0e9*FFACTOR;
+    double hostdata = 2.0*noderayoutall*sizeof(VECPREC)*(numproj+numback)/1.0e9*FFACTOR;
     double socketbw = socketdata/(pcstime+bcstime)*numproc;
     double nodebw = nodedata/(pcntime+bcntime)*numproc;
     double hostbw = hostdata/(pchtime+bchtime)*numproc;
@@ -458,31 +464,33 @@ int main(int argc, char** argv){
     printf("PERGPU MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numproc,socketbw/numproc,nodebw/numproc,hostbw/numproc);
     printf("\n");
   }
-  float *mesall = new float[numray];
+  float *mesall = new float[numray*FFACTOR];
   #pragma omp parallel for
-  for(int n = 0; n < numray; n++)
-    mesall[n] = 0;
-  #pragma omp parallel for
-  for(int k = 0; k < mynumray; k++)
-    mesall[rayglobalind[k]] = mes_h[k];
-  MPI_Allreduce(MPI_IN_PLACE,mesall,numray,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+  for(int n = 0; n < numray*FFACTOR; n++)
+    mesall[n] = 0.0;
+  for(int slice = 0; slice < FFACTOR; slice++)
+    #pragma omp parallel for
+    for(int k = 0; k < mynumray; k++)
+      mesall[slice*numray+rayglobalind[k]] = mes_h[slice*mynumray+k];
+  MPI_Allreduce(MPI_IN_PLACE,mesall,numray*FFACTOR,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
   if(myid==0){
     FILE *mesf = fopen("/gpfs/alpine/scratch/merth/csc362/mesall_new.bin","wb");
-    fwrite(mesall,sizeof(float),numray,mesf);
+    fwrite(mesall,sizeof(float),numray*FFACTOR,mesf);
     fclose(mesf);
   }
   delete[] mesall;
-  float *objall = new float[numpix];
+  float *objall = new float[numpix*FFACTOR];
   #pragma omp parallel for
-  for(int n = 0; n < numpix; n++)
+  for(int n = 0; n < numpix*FFACTOR; n++)
     objall[n] = 0.0;
-  #pragma omp parallel for
-  for(int n = 0; n < mynumpix; n++)
-    objall[pixglobalind[n]] = obj_h[n];
-  MPI_Allreduce(MPI_IN_PLACE,objall,numpix,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+  for(int slice = 0; slice < FFACTOR; slice++)
+    #pragma omp parallel for
+    for(int n = 0; n < mynumpix; n++)
+      objall[slice*numpix+pixglobalind[n]] = obj_h[slice*mynumpix+n];
+  MPI_Allreduce(MPI_IN_PLACE,objall,numpix*FFACTOR,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
   if(myid==0){
     FILE *objf = fopen("/gpfs/alpine/scratch/merth/csc362/object_new.bin","wb");
-    fwrite(objall,sizeof(float),numpix,objf);
+    fwrite(objall,sizeof(float),numpix*FFACTOR,objf);
     fclose(objf);
   }
   delete[] objall;

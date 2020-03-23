@@ -114,8 +114,8 @@ void reducemap(){
     }
     socketrayoutall = socketrayincdispl[numsocket];
     MPI_Allreduce(MPI_IN_PLACE,&socketrayoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    if(myid==0)printf("ALL COMMUNICATION: %ld (%f MB)\n",raynumoutall,raynumoutall*sizeof(VECPREC)/1024.0/1024.0);
-    if(myid==0)printf("INTER-SOCKET COMM: %ld (%f MB) %f%% saving\n",socketrayoutall,socketrayoutall*sizeof(VECPREC)/1024.0/1024.0,(raynumoutall-socketrayoutall)/(double)raynumoutall*100);
+    if(myid==0)printf("ALL COMMUNICATION: %ld (%f MB)\n",raynumoutall,raynumoutall*sizeof(VECPREC)/1.0e6);
+    if(myid==0)printf("INTER-SOCKET COMM: %ld (%f MB) %f%% saving\n",socketrayoutall,socketrayoutall*sizeof(VECPREC)/1.0e6,(raynumoutall-socketrayoutall)/(double)raynumoutall*100);
     for(int m = 0; m < mynumray; m++){
       int count[numsocket];
       for(int socket = 0; socket < numsocket; socket++)
@@ -394,7 +394,7 @@ void reducemap(){
     }
     noderayoutall = noderayincdispl[numnode];
     MPI_Allreduce(MPI_IN_PLACE,&noderayoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    if(myid==0)printf("  INTER-NODE COMM: %ld (%f MB) %f%% saving (%f%% additional saving)\n",noderayoutall,noderayoutall*sizeof(VECPREC)/1024.0/1024.0,(raynumoutall-noderayoutall)/(double)raynumoutall*100,(socketrayoutall-noderayoutall)/(double)socketrayoutall*100);
+    if(myid==0)printf("  INTER-NODE COMM: %ld (%f MB) %f%% saving (%f%% additional saving)\n",noderayoutall,noderayoutall*sizeof(VECPREC)/1.0e6,(raynumoutall-noderayoutall)/(double)raynumoutall*100,(socketrayoutall-noderayoutall)/(double)socketrayoutall*100);
     for(int m = 0; m < mynumray; m++){
       int count[numnode];
       for(int node = 0; node < numnode; node++)

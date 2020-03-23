@@ -4,8 +4,8 @@ export NUMTHE=1501
 export NUMRHO=2048
 #DOMAIN SIZE
 export NUMX=2048
-export NUMSLICE=1
-export BATCHSIZE=1
+export NUMSLICE=16
+export BATCHSIZE=16
 #DOMAIN INFORMATION
 export XSTART=-1024
 export RHOSTART=-1024
@@ -26,13 +26,14 @@ export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extr
 export PROCPERNODE=1 #PROCS PER NODE
 export PROCPERSOCKET=1 #PROCS PER SOCKET
 
-#jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof -o /gpfs/alpine/scratch/merth/csc362/profile/timeline_%p.nvvp -f ./memxct
-#jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --profile-all-processes -o /gpfs/alpine/scratch/merth/csc362/profile/timeline_%p.nvvp -f ./memxct
-#jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --analysis-metrics -o /gpfs/alpine/scratch/merth/csc362/profile/analysis.nvvp -f ./memxct
+#jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof -o /gpfs/alpine/scratch/merth/csc362/profile/timeline_%p.nvvp -f ./memxct
+#jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --analysis-metrics -o /gpfs/alpine/scratch/merth/csc362/profile/analysis_%p.nvvp -f ./memxct
 #mv /gpfs/alpine/scratch/merth/csc362/profile/timeline_*.nvvp .
-#mv /gpfs/alpine/scratch/merth/csc362/profile/analysis.nvvp .
+#mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
-#jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+
+exit 1
 
 cp var_1 vars.h
 make clean
