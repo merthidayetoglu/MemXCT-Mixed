@@ -58,6 +58,7 @@ int *proj_buffdispl;
 int proj_mapnztot;
 int proj_mapnzall;
 int *proj_mapdispl;
+int *proj_mapnz;
 int *proj_buffmap;
 int proj_warpnztot;
 long proj_warpnzall;
@@ -76,6 +77,7 @@ int *back_buffdispl;
 int back_mapnztot;
 int back_mapnzall;
 int *back_mapdispl;
+int *back_mapnz;
 int *back_buffmap;
 int back_warpnztot;
 long back_warpnzall;
@@ -609,7 +611,7 @@ void preproc(){
     mapdispl[0] = 0;
     for(int buff = 1; buff < numbufftot+1; buff++)
       mapdispl[buff] = mapdispl[buff-1] + mapnz[buff-1];
-    delete[] mapnz;
+    //delete[] mapnz;
     int mapnztot = mapdispl[numbufftot];
     long mapnzall = mapnztot;
     MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
@@ -740,6 +742,7 @@ void preproc(){
     proj_mapnztot = mapnztot;
     proj_mapnzall = mapnzall;
     proj_mapdispl = mapdispl;
+    proj_mapnz = mapnz;
     proj_buffmap = buffmap;
     proj_warpnztot = warpnztot;
     proj_warpnzall = warpnzall;
@@ -824,7 +827,7 @@ void preproc(){
     mapdispl[0] = 0;
     for(int buff = 1; buff < numbufftot+1; buff++)
       mapdispl[buff] = mapdispl[buff-1] + mapnz[buff-1];
-    delete[] mapnz;
+    //delete[] mapnz;
     int mapnztot = mapdispl[numbufftot];
     long mapnzall = mapnztot;
     MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
@@ -955,6 +958,7 @@ void preproc(){
     back_mapnztot = mapnztot;
     back_mapnzall = mapnzall;
     back_mapdispl = mapdispl;
+    back_mapnz = mapnz;
     back_buffmap = buffmap;
     back_warpnztot = warpnztot;
     back_warpnzall = warpnzall;

@@ -42,6 +42,7 @@ extern int *proj_buffdispl;
 extern int proj_buffsize;
 extern int proj_mapnztot;
 extern int *proj_mapdispl;
+extern int *proj_mapnz;
 extern int *proj_buffmap;
 extern int proj_warpnztot;
 extern int *proj_warpdispl;
@@ -55,6 +56,7 @@ extern int *back_buffdispl;
 extern int back_buffsize;
 extern int back_mapnztot;
 extern int *back_mapdispl;
+extern int *back_mapnz;
 extern int *back_buffmap;
 extern int back_warpnztot;
 extern int *back_warpdispl;
@@ -63,12 +65,14 @@ extern MATPREC *back_warpvalue;
 
 int *proj_buffdispl_d;
 int *proj_mapdispl_d;
+int *proj_mapnz_d;
 int *proj_buffmap_d;
 int *proj_warpdispl_d;
 unsigned short *proj_warpindex_d;
 MATPREC *proj_warpvalue_d;
 int *back_buffdispl_d;
 int *back_mapdispl_d;
+int *back_mapnz_d;
 int *back_buffmap_d;
 int *back_warpdispl_d;
 unsigned short *back_warpindex_d;
@@ -159,8 +163,8 @@ extern int *noderecvbuffdispl_p;
 extern VECPREC **noderecvbuff_p;
 extern int *noderecvdevice_p;
 
-__global__ void kernel_project __launch_bounds__(1024,1) (VECPREC*,double*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int,int*);
-__global__ void kernel_backproject __launch_bounds__(1024,1) (double*,VECPREC*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int,int*);
+__global__ void kernel_project __launch_bounds__(1024,1) (VECPREC*,double*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int,int*);
+__global__ void kernel_backproject __launch_bounds__(1024,1) (double*,VECPREC*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int,int*);
 __global__ void kernel_reduce(VECPREC*,VECPREC*,int*,int*,int,int,int*,int*);
 __global__ void kernel_reducenopack(double*,VECPREC*,int*,int*,int,int,int*);
 __global__ void kernel_scatternopack(double*,VECPREC*,int*,int*,int,int,int*);
@@ -272,6 +276,7 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   double projmem = 0.0;
   projmem = projmem + sizeof(int)/1.0e9*(proj_numblocks+1);
   projmem = projmem + sizeof(int)/1.0e9*(proj_numbufftot+1);
+  projmem = projmem + sizeof(int)/1.0e9*proj_numbufftot;
   projmem = projmem + sizeof(int)/1.0e9*proj_mapnztot;
   projmem = projmem + sizeof(int)/1.0e9*(proj_numbufftot*(proj_blocksize/WARPSIZE)+1);
   projmem = projmem + sizeof(unsigned short)/1.0e9*(proj_warpnztot*WARPSIZE);
@@ -281,12 +286,14 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
 
   cudaMalloc((void**)&proj_buffdispl_d,sizeof(int)*(proj_numblocks+1));
   cudaMalloc((void**)&proj_mapdispl_d,sizeof(int)*(proj_numbufftot+1));
+  cudaMalloc((void**)&proj_mapnz_d,sizeof(int)*proj_numbufftot);
   cudaMalloc((void**)&proj_buffmap_d,sizeof(int)*proj_mapnztot);
   cudaMalloc((void**)&proj_warpdispl_d,sizeof(int)*(proj_numbufftot*(proj_blocksize/WARPSIZE)+1));
   cudaMalloc((void**)&proj_warpindex_d,sizeof(unsigned short)*proj_warpnztot*WARPSIZE);
   cudaMalloc((void**)&proj_warpvalue_d,sizeof(MATPREC)*proj_warpnztot*WARPSIZE);
   cudaMemcpy(proj_buffdispl_d,proj_buffdispl,sizeof(int)*(proj_numblocks+1),cudaMemcpyHostToDevice);
   cudaMemcpy(proj_mapdispl_d,proj_mapdispl,sizeof(int)*(proj_numbufftot+1),cudaMemcpyHostToDevice);
+  cudaMemcpy(proj_mapnz_d,proj_mapnz,sizeof(int)*proj_numbufftot,cudaMemcpyHostToDevice);
   cudaMemcpy(proj_buffmap_d,proj_buffmap,sizeof(int)*proj_mapnztot,cudaMemcpyHostToDevice);
   cudaMemcpy(proj_warpdispl_d,proj_warpdispl,sizeof(int)*(proj_numbufftot*(proj_blocksize/WARPSIZE)+1),cudaMemcpyHostToDevice);
   cudaMemcpy(proj_warpindex_d,proj_warpindex,sizeof(unsigned short)*proj_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
@@ -294,12 +301,14 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
 
   cudaMalloc((void**)&back_buffdispl_d,sizeof(int)*(back_numblocks+1));
   cudaMalloc((void**)&back_mapdispl_d,sizeof(int)*(back_numbufftot+1));
+  cudaMalloc((void**)&back_mapnz_d,sizeof(int)*back_numbufftot);
   cudaMalloc((void**)&back_buffmap_d,sizeof(int)*back_mapnztot);
   cudaMalloc((void**)&back_warpdispl_d,sizeof(int)*(back_numbufftot*(back_blocksize/WARPSIZE)+1));
   cudaMalloc((void**)&back_warpindex_d,sizeof(unsigned short)*back_warpnztot*WARPSIZE);
   cudaMalloc((void**)&back_warpvalue_d,sizeof(MATPREC)*back_warpnztot*WARPSIZE);
   cudaMemcpy(back_buffdispl_d,back_buffdispl,sizeof(int)*(back_numblocks+1),cudaMemcpyHostToDevice);
   cudaMemcpy(back_mapdispl_d,back_mapdispl,sizeof(int)*(back_numbufftot+1),cudaMemcpyHostToDevice);
+  cudaMemcpy(back_mapnz_d,back_mapnz,sizeof(int)*back_numbufftot,cudaMemcpyHostToDevice);
   cudaMemcpy(back_buffmap_d,back_buffmap,sizeof(int)*back_mapnztot,cudaMemcpyHostToDevice);
   cudaMemcpy(back_warpdispl_d,back_warpdispl,sizeof(int)*(back_numbufftot*(back_blocksize/WARPSIZE)+1),cudaMemcpyHostToDevice);
   cudaMemcpy(back_warpindex_d,back_warpindex,sizeof(unsigned short)*back_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
@@ -308,6 +317,7 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   double backmem = 0.0;
   backmem = backmem + sizeof(int)/1.0e9*(back_numblocks+1);
   backmem = backmem + sizeof(int)/1.0e9*(back_numbufftot+1);
+  backmem = backmem + sizeof(int)/1.0e9*back_numbufftot;
   backmem = backmem + sizeof(int)/1.0e9*back_mapnztot;
   backmem = backmem + sizeof(int)/1.0e9*(back_numbufftot*(back_blocksize/WARPSIZE)+1);
   backmem = backmem + sizeof(unsigned short)/1.0e9*(back_warpnztot*WARPSIZE);
@@ -358,7 +368,7 @@ void projection(double *sino_d, double *tomo_d){
   for(int slice = 0; slice < batchsize; slice += FFACTOR){
     //PARTIAL PROJECTION
     cudaEventRecord(start);
-    kernel_project<<<proj_numblocks,proj_blocksize,sizeof(VECPREC)*proj_buffsize*FFACTOR>>>(socketreducesendbuff_d,tomo_d+slice*mynumpix,proj_warpindex_d,proj_warpvalue_d,raynumout,mynumpix,proj_buffdispl_d,proj_warpdispl_d,proj_mapdispl_d,proj_buffmap_d,proj_buffsize,socketpackmap_d);
+    kernel_project<<<proj_numblocks,proj_blocksize,sizeof(VECPREC)*proj_buffsize*FFACTOR>>>(socketreducesendbuff_d,tomo_d+slice*mynumpix,proj_warpindex_d,proj_warpvalue_d,raynumout,mynumpix,proj_buffdispl_d,proj_warpdispl_d,proj_mapdispl_d,proj_mapnz_d,proj_buffmap_d,proj_buffsize,socketpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -529,7 +539,7 @@ void backproject(double *tomo_d, double *sino_d){
     bcstime += MPI_Wtime()-cstime;
     //BACKPROJECTION
     cudaEventRecord(start);
-    kernel_backproject<<<back_numblocks,back_blocksize,sizeof(VECPREC)*back_buffsize*FFACTOR>>>(tomo_d+slice*mynumpix,socketreducesendbuff_d,back_warpindex_d,back_warpvalue_d,mynumpix,raynumout,back_buffdispl_d,back_warpdispl_d,back_mapdispl_d,back_buffmap_d,back_buffsize,socketpackmap_d);
+    kernel_backproject<<<back_numblocks,back_blocksize,sizeof(VECPREC)*back_buffsize*FFACTOR>>>(tomo_d+slice*mynumpix,socketreducesendbuff_d,back_warpindex_d,back_warpvalue_d,mynumpix,raynumout,back_buffdispl_d,back_warpdispl_d,back_mapdispl_d,back_mapnz_d,back_buffmap_d,back_buffsize,socketpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -541,13 +551,14 @@ void backproject(double *tomo_d, double *sino_d){
   }
   btime += MPI_Wtime()-backprojtime;
 }
-__global__ void kernel_project(VECPREC *y, double *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *buffmap, int buffsize, int *packmap){
+__global__ void kernel_project(VECPREC *y, double *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize, int *packmap){
   extern __shared__ VECPREC shared[];
   VECPREC acc[FFACTOR] = {0.0};
   int wind = threadIdx.x%WARPSIZE;
   for(int buff = buffdispl[blockIdx.x]; buff < buffdispl[blockIdx.x+1]; buff++){
-    for(int i = threadIdx.x; i < mapdispl[buff+1]-mapdispl[buff]; i += blockDim.x){
-      int ind = buffmap[mapdispl[buff]+i];
+    int mapoffset = mapdispl[buff];
+    for(int i = threadIdx.x; i < mapnz[buff]; i += blockDim.x){
+      int ind = buffmap[mapoffset+i];
       for(int f = 0; f < FFACTOR; f++)
         shared[f*buffsize+i] = x[f*numcol+ind];
     }
@@ -566,13 +577,14 @@ __global__ void kernel_project(VECPREC *y, double *x, unsigned short *index, MAT
     for(int f = 0; f < FFACTOR; f++)
       y[packmap[f*numrow+row]] = acc[f];
 }
-__global__ void kernel_backproject(double *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *buffmap, int buffsize, int *packmap){
+__global__ void kernel_backproject(double *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize, int *packmap){
   extern __shared__ VECPREC shared[];
   VECPREC acc[FFACTOR] = {0.0};
   int wind = threadIdx.x%WARPSIZE;
   for(int buff = buffdispl[blockIdx.x]; buff < buffdispl[blockIdx.x+1]; buff++){
-    for(int i = threadIdx.x; i < mapdispl[buff+1]-mapdispl[buff]; i += blockDim.x){
-      int ind = buffmap[mapdispl[buff]+i];
+    int mapoffset = mapdispl[buff];
+    for(int i = threadIdx.x; i < mapnz[buff]; i += blockDim.x){
+      int ind = buffmap[mapoffset+i];
       for(int f = 0; f < FFACTOR; f++)
         shared[f*buffsize+i] = x[packmap[f*numcol+ind]];
     }
