@@ -25,9 +25,9 @@ extern int numray; //NUMBER OF RAYS (EXTENDED)
 extern int numspattile; //NUMBER OF SPATIAL TILES
 extern int numspectile; //NUMBER OF SPECTRAL TILES
 
+long raynumoutall;
 extern int raynuminc;
 extern int raynumout;
-extern long raynumoutall;
 extern int mynumray;
 extern int mynumpix;
 
@@ -45,6 +45,8 @@ extern int proj_blocksize;
 extern int proj_buffsize;
 extern int back_blocksize;
 extern int back_buffsize;
+
+
 
 int proj_maxnz;
 int proj_rownztot;
@@ -86,13 +88,19 @@ unsigned short *back_warpindex;
 bool *back_warpindextag;
 MATPREC *back_warpvalue;
 
-extern int *rayglobalind;
-extern int *pixglobalind;
-extern int *raymesind;
+int *rayglobalind;
+int *pixglobalind;
+int *raymesind;
+int *pixobjind;
+int *objglobalind;
 
 complex<double> *pixcoor;
 complex<double> *raycoor;
 
+int *numpixs;
+int *numrays;
+int *pixstart;
+int *raystart;
 
 void preproc(){
 
@@ -118,19 +126,18 @@ void preproc(){
     spatlevel++;
   }
   int lspatdim = pow(2,spatlevel);
-  //if(myid==0)printf("lspat %d lspatdim %d\n",lspat,lspatdim);
   complex<double> *spatlltemp = new complex<double>[lspatdim*lspatdim];
   #pragma omp parallel for
   for(int lspat = 0; lspat < lspatdim*lspatdim; lspat++)
     spatlltemp[lspat].real(xstart-1);
-  #pragma omp parallel for
+  //#pragma omp parallel for
   for(int spat = 0; spat < numspattile; spat++){
     int ytile = spat/numxtile;
     int xtile = spat%numxtile;
     int ind = 0;
       //ind = ytile*numxtile+xtile;
       //ind = encode(xtile,ytile);
-      ind = xy2d (numxtile,xtile,ytile);
+      ind = xy2d (lspatdim,xtile,ytile);
     double x = xstart+xtile*spatsize*pixsize;
     double y = ystart+ytile*spatsize*pixsize;
     spatlltemp[ind]=complex<double>(x,y);
@@ -152,11 +159,10 @@ void preproc(){
     speclevel++;
   }
   int lspecdim = pow(2,speclevel);
-  //if(myid==0)printf("lspec %d lspecdim %d\n",lspec,lspecdim);
   complex<double> *speclltemp = new complex<double>[lspecdim*lspecdim];
   #pragma omp parallel for
   for(int lspec = 0; lspec < lspecdim*lspecdim; lspec++)
-    speclltemp[lspec].real(rhostart-1);
+    speclltemp[lspec].real(rhostart-1.0);
   #pragma omp parallel for
   for(int spec = 0; spec < numspectile; spec++){
     int thetile = spec/numrtile;
@@ -182,10 +188,10 @@ void preproc(){
   int numspecs[numproc];
   int spatstart[numproc];
   int specstart[numproc];
-  int numpixs[numproc];
-  int numrays[numproc];
-  int pixstart[numproc];
-  int raystart[numproc];
+  numpixs = new int[numproc];
+  numrays = new int [numproc];
+  pixstart = new int[numproc];
+  raystart = new int[numproc];
   int myspattemp = (numspattile/numproc)*numproc;
   int myspectemp = (numspectile/numproc)*numproc;
   for(int p = 0; p < numproc; p++){
@@ -238,6 +244,7 @@ void preproc(){
   //PLACE PIXELS
   pixcoor = new complex<double>[mynumpix];
   pixglobalind = new int[mynumpix];
+  pixobjind = new int[mynumpix];
   #pragma omp parallel for
   for(int pix = 0; pix < mynumpix; pix++){
     int tile = pix/(spatsize*spatsize);
@@ -252,6 +259,10 @@ void preproc(){
     int xglobalind = (int)((x-xstart)/pixsize);
     int yglobalind = (int)((y-ystart)/pixsize);
     pixglobalind[ind] = yglobalind*numxtile*spatsize+xglobalind;
+    if(xglobalind < numx && yglobalind < numy)
+      pixobjind[ind] = yglobalind*numx+xglobalind;
+    else
+      pixobjind[ind] = -1;
   }
   float *mestheta = new float[numt];
   if(myid==0)printf("INPUT THETA DATA\n");
@@ -276,7 +287,7 @@ void preproc(){
     int rhoglobalind = (int)((rho-rhostart));
     int theglobalind = (int)((the+(M_PI/numt)/2)/(M_PI/numt));
     rayglobalind[ind] = theglobalind*numrtile*specsize+rhoglobalind;
-    if(theglobalind<numt && rhoglobalind<numr){
+    if(theglobalind < numt && rhoglobalind < numr){
       raymesind[ind] = theglobalind*numr+rhoglobalind;
       raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
       //raycoor[ind] = complex<double>(rho,the);
@@ -381,7 +392,41 @@ void preproc(){
     raycoorinc[k] = raycoor[rayrecvlist[k]];
   MPI_Alltoallv(raycoorinc,rayrecvcount,rayrecvstart,MPI_DOUBLE_COMPLEX,raycoorout,raysendcount,raysendstart,MPI_DOUBLE_COMPLEX,MPI_COMM_WORLD);
   delete[] raycoor;
-  if(myid==0)printf("\nREDUCTION MAPPINGS\n");
+  //OBJECT MAPPING
+  {
+    extern int batchsize;
+    int *pixobjinds;
+    if(myid == 0){
+      pixobjinds = new int[numpix];
+      objglobalind = new int[numx*numy*batchsize];
+    }
+    MPI_Gatherv(pixobjind,mynumpix,MPI_INT,pixobjinds,numpixs,pixstart,MPI_INT,0,MPI_COMM_WORLD);
+    if(myid==0){
+      for(int p = 0; p < numproc; p++)
+        #pragma omp parallel for
+        for(int n = 0; n < numpixs[p]; n++){
+          int ind = pixobjinds[pixstart[p]+n];
+          if(ind > -1)
+            for(int slice = 0; slice < batchsize; slice++)
+              objglobalind[slice*numx*numy+ind] = batchsize*pixstart[p]+slice*numpixs[p]+n;
+        }
+      delete[] pixobjinds;
+    }
+  }
+
+  /*int *pixglobalinds = new int[numpix];
+  int *objproc = new int[numpix];
+  MPI_Gatherv(pixglobalind,mynumpix,MPI_INT,pixglobalinds,numpixs,pixstart,MPI_INT,0,MPI_COMM_WORLD);
+  if(myid==0){
+    for(int p = 0; p < numproc; p++)
+      for(int n = pixstart[p]; n < pixstart[p]+numpixs[p]; n++)
+        objproc[pixglobalinds[n]] = p;
+    FILE *objprocf = fopen("/gpfs/alpine/scratch/merth/csc362/objproc.bin","wb");
+    fwrite(objproc,sizeof(float),numpix,objprocf);
+    fclose(objprocf);
+  }
+  delete[] pixglobalinds;
+  delete[] objproc;*/
 
     /*{
       int N = 1000000;
@@ -408,7 +453,7 @@ void preproc(){
     }
     return;*/
 
-
+  if(myid==0)printf("\nREDUCTION MAPPINGS\n");
   reducemap();
   MPI_Barrier(MPI_COMM_WORLD);
   time = MPI_Wtime();

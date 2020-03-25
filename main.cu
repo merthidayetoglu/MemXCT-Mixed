@@ -27,6 +27,7 @@ int numy; //Y SIZE OF DOMAIN
 int numt; //NUMBER OF THETA
 int numr; //NUMBER OF RHO
 int numslice; //NUMBER OF SLICES
+int startslice; //START SLICE INDEX 0 BASE
 int batchsize; //SLICE PER BATCH
 int numbatch; //NUMBER OF BATCHES
 
@@ -38,6 +39,7 @@ double raylength; //RAYLENGTH
 
 char *sinfile; //SINOGRAM FILE
 char *thefile; //THETA FILE
+char *outfile; //OUTPUT FILE
 int numiter; //NUMBER OF ITERATIONS
 
 int spatsize; //SPATIAL TILE SIZE
@@ -58,7 +60,6 @@ int back_buffsize;
 
 int raynuminc;
 int raynumout;
-long raynumoutall;
 int mynumray;
 int mynumpix;
 
@@ -71,11 +72,6 @@ int *rayraystart;
 int *rayrayind;
 
 int *rayrecvlist;
-
-//INDEX MAPPINGS
-int *rayglobalind;
-int *pixglobalind;
-int *raymesind;
 
 int numthreads;
 int numproc;
@@ -107,12 +103,14 @@ int main(int argc, char** argv){
   numt = atoi(chartemp);
   chartemp = getenv("NUMRHO");
   numr = atoi(chartemp);
-  chartemp = getenv("NUMX");
-  numx = atoi(chartemp);
+  //chartemp = getenv("NUMX");
+  numx = numr;//atoi(chartemp);
   //chartemp = getenv("NUMY");
   numy = numx;//atoi(chartemp);
   chartemp = getenv("NUMSLICE");
   numslice = atoi(chartemp);
+  chartemp = getenv("STARTSLICE");
+  startslice = atoi(chartemp);
   chartemp = getenv("BATCHSIZE");
   batchsize = atoi(chartemp);
 
@@ -142,6 +140,7 @@ int main(int argc, char** argv){
 
   sinfile = getenv("SINFILE");
   thefile = getenv("THEFILE");
+  outfile = getenv("OUTFILE");
   chartemp = getenv("PROCPERNODE");
   numproc_node = atoi(chartemp);
   chartemp = getenv("PROCPERSOCKET");
@@ -198,6 +197,7 @@ int main(int argc, char** argv){
     printf("  NUMBER OF RAYS (THE x RHO): %d (%d x %d)\n",numt*numr,numt,numr);
     printf("    NUMBER OF PIXELS (X x Y): %d (%d x %d)\n",numx*numy,numx,numy);
     printf("         NUM. SLICES (B x S): %d (%d x %d)\n",numslice,numbatch,batchsize);
+    printf("                 START SLICE: %d\n",startslice);
     printf("                  BATCH SIZE: %d (%f + %f GB) %d FUSE FACTOR\n",batchsize,numr*numt*batchsize*sizeof(VECPREC)/1.0e9,numx*numy*batchsize*sizeof(VECPREC)/1.0e9,FFACTOR);
     printf("\n");
     printf("     SPATIAL / SPECTRAL  TILE SIZE: %d (%d x %d) / %d (%d x %d)\n",spatsize*spatsize,spatsize,spatsize,specsize*specsize,specsize,specsize);
@@ -226,6 +226,7 @@ int main(int argc, char** argv){
     printf("NUMBER OF ITERATIONS: %d\n",numiter);
     printf("SINOGRAM FILE : %s\n",sinfile);
     printf("   THETA FILE : %s\n",thefile);
+    printf("  OUTPUT FILE : %s\n",outfile);
     printf("\n");
     printf("NUMBER OF PROCS PER SOCKET: %d PER NODE: %d\n",numproc_socket,numproc_node);
     printf("NUMBER OF NODES: %d SOCKETS: %d PROCS: %d\n",numnode,numsocket,numproc);
@@ -237,6 +238,7 @@ int main(int argc, char** argv){
   preproc();
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("PREPROCESSING TIME: %e\n",MPI_Wtime()-timep);
+  return 0;
 
   double *obj_h;//OBJECT
   double *gra_h;//GRADIENT
@@ -260,16 +262,20 @@ int main(int argc, char** argv){
 
   setup_gpu(&obj_d,&gra_d,&dir_d,&mes_d,&res_d,&ray_d);
 
-  
+  float *pixsendbuff = new float[mynumpix*batchsize];
+  float *pixrecvbuff;
+  float *objwritebuff;
+  if(myid == 0){
+    pixrecvbuff = new float[numpix*batchsize];
+    objwritebuff = new float[numx*numy*batchsize];
+  }
   float *mesdata = new float[numt*numr*batchsize];
-  float *recdata  = new float[numpix*batchsize];
-  char recfile[1000];
-  sprintf(recfile,"%s_rec",sinfile);
-  if(myid==0)printf("RECONSTRUCTION FILE: %s\n",recfile);
+  if(myid==0)printf("OUTPUT FILE: %s\n",outfile);
   FILE *inputf;
   FILE *outputf;
   if(myid==0)inputf = fopen(sinfile,"rb");
-  if(myid==0)outputf = fopen(recfile,"wb");
+  if(myid==0)fseek(inputf,sizeof(float)*startslice*numr*numt,SEEK_SET);
+  if(myid==0)outputf = fopen(outfile,"wb");
   if(myid==0)printf("CONJUGATE-GRADIENT OPTIMIZATION\n");
   MPI_Barrier(MPI_COMM_WORLD);
   double time = 0;
@@ -280,38 +286,40 @@ int main(int argc, char** argv){
     MPI_Barrier(MPI_COMM_WORLD);
     time = MPI_Wtime();
     {
-      if(myid==0)fread(mesdata,sizeof(float),numr*numt,inputf);
-      MPI_Bcast(mesdata,numr*numt,MPI_FLOAT,0,MPI_COMM_WORLD);
-      for(int slice = 0; slice < batchsize; slice++)
+      extern int *raymesind;
+      if(myid==0)fread(mesdata,sizeof(float),numr*numt*batchsize,inputf);
+      for(int slice = 0; slice < batchsize; slice++){
+        MPI_Bcast(mesdata+slice*numr*numt,numr*numt,MPI_FLOAT,0,MPI_COMM_WORLD);
         #pragma omp parallel for
         for(int k = 0; k < mynumray; k++)
-          if(raymesind[k]>-1)mes_h[slice*mynumray+k] = mesdata[raymesind[k]];
+          if(raymesind[k]>-1)mes_h[slice*mynumray+k] = mesdata[slice*numr*numt+raymesind[k]];
           else mes_h[slice*mynumray+k] = 0;
+      }
       cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
-      cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
       //NORMALIZE
-      extern int proj_maxnz;
-      extern int back_maxnz;
-      double mesmax = max_kernel(mes_h,mynumray*batchsize);
-      double raymax = mesmax*back_maxnz*sqrt(2)*numx*sqrt(2);
-      double scalefactor = 64e3/raymax;
-      if(myid==0)printf("maximum possible: %e scale factor: %e\n",raymax,scalefactor);
-      scale_kernel(mes_d,scalefactor,mynumray*batchsize);
+      //extern int proj_maxnz;
+      //extern int back_maxnz;
+      //double mesmax = max_kernel(mes_h,mynumray*batchsize);
+      //double raymax = mesmax*back_maxnz*sqrt(2)*numx*sqrt(2);
+      //double scalefactor = 64e3/raymax;
+      //if(myid==0)printf("maximum possible: %e scale factor: %e\n",raymax,scalefactor);
+      //scale_kernel(mes_d,scalefactor,mynumray*batchsize);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
     //FIND GRADIENT
-    backproject(gra_d,mes_d);
-    cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
+    backproject(obj_d,mes_d);
+    cudaMemcpy(obj_h,obj_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
     double resnorm = norm_kernel(mes_h,mynumray*batchsize);
     double resmax = max_kernel(mes_h,mynumray*batchsize);
-    double gradnorm = norm_kernel(gra_h,mynumpix*batchsize);
-    double gradmax = max_kernel(gra_h,mynumpix*batchsize);
+    double gradnorm = norm_kernel(obj_h,mynumpix*batchsize);
+    double gradmax = max_kernel(obj_h,mynumpix*batchsize);
     double objnorm = 0.0;
     double objmax = 0.0;
     if(myid==0)printf("iter: %d resnorm: %e resmax: %e gradnorm: %e gradmax: %e objnorm: %e objmax: %e\n",0,resnorm,resmax,gradnorm,gradmax,objnorm,objmax);
     //SAVE DIRECTION
     double oldgradnorm = gradnorm;
+    copy_kernel(gra_d,obj_d,mynumpix*batchsize);
     copy_kernel(dir_d,gra_d,mynumpix*batchsize);
     copy_kernel(res_d,mes_d,mynumray*batchsize);
     //START ITERATIONS
@@ -348,22 +356,28 @@ int main(int argc, char** argv){
       oldgradnorm = gradnorm;
       saxpy_kernel(dir_d,gra_d,beta,dir_d,mynumpix*batchsize);
     }
-    //WRITE SLICE
+    //WRITE OUTPUT BATCH
     MPI_Barrier(MPI_COMM_WORLD);
     time = MPI_Wtime();
     {
-      //#pragma omp parallel for
-      //for(int n = 0; n < numpix*batchsize; n++)
-      //  recdata[n] = 0;
-      //for(int slice = 0; slice < batchsize; slice++)
-      //  #pragma omp parallel for
-      //  for(int n = 0; n < mynumpix; n++)
-      //    recdata[slice*numpix+pixglobalind[n]] = obj_h[slice*mynumpix+n];
-      //if(myid==0)
-      //  MPI_Reduce(MPI_IN_PLACE,recdata,numpix*batchsize,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-      //else
-      //  MPI_Reduce(recdata,recdata,numpix*batchsize,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-      //if(myid==0)fwrite(recdata,sizeof(double),numpix*batchsize,recf);
+      extern int *numpixs;
+      extern int *pixstart;
+      extern int *objglobalind;
+      MPI_Request sendrequest;
+      MPI_Request recvrequest[numproc];
+      #pragma omp parallel for
+      for(int n = 0; n < mynumpix*batchsize; n++)
+        pixsendbuff[n] = obj_h[n];
+      MPI_Issend(pixsendbuff,mynumpix*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,&sendrequest);
+      if(myid == 0){
+        for(int p = 0; p < numproc; p++)
+          MPI_Irecv(pixrecvbuff+pixstart[p]*batchsize,numpixs[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,recvrequest+p);
+        MPI_Waitall(numproc,recvrequest,MPI_STATUSES_IGNORE);
+        #pragma omp parallel for
+        for(int n = 0; n < numx*numy*batchsize; n++)
+          objwritebuff[n] = pixrecvbuff[objglobalind[n]];
+        fwrite(objwritebuff,sizeof(float),numx*numy*batchsize,outputf);
+      }
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
@@ -397,11 +411,13 @@ int main(int argc, char** argv){
     extern int proj_mapnzall;
     extern long back_warpnzall;
     extern int back_mapnzall;
+    extern long raynumoutall;
     extern long socketrayoutall;
     extern long noderayoutall;
     double pother = ptime-prtime-pktime-pmtime-pcstime-pcntime-pcrtime-pchtime;
     double bother = btime-brtime-bktime-bmtime-bcstime-bcntime-bcrtime-bchtime;
-    printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pmtime,pcstime,pcntime,pchtime,prtime,pother,btime,bktime,bmtime,bcstime,bcntime,bchtime,prtime,bother);
+    printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pcstime,pcntime,pchtime,pmtime,prtime,pother,btime,bktime,bcstime,bcntime,bchtime,bmtime,prtime,bother);
+    printf("AGGREGATE total %e ( %e %e %e %e %e %e %e )\n",ptime+btime,pktime+bktime,pcstime+bcstime,pcntime+bcntime,pchtime+bchtime,pmtime+bmtime,prtime+brtime,pother+bother);
     printf("NUMBER OF PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
     double projflop = proj_rownzall/1.0e9*2*(2*numiter)*numslice;
     double backflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
@@ -464,7 +480,66 @@ int main(int argc, char** argv){
     printf("PERGPU MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numproc,socketbw/numproc,nodebw/numproc,hostbw/numproc);
     printf("\n");
   }
-  float *mesall = new float[numray*FFACTOR];
+  /*extern int *numpixs;
+  extern int *numrays;
+  extern int *pixstart;
+  extern int *raystart;
+
+  float *mesrecvbuff;
+  float *meswritebuff;
+  int *rayglobalinds;
+  float *messendbuff = new float[mynumray];
+  if(myid == 0){
+    mesrecvbuff = new float[numray];
+    rayglobalinds = new int[numray];
+    meswritebuff = new float[numray];
+  }
+  MPI_Gatherv(rayglobalind,mynumray,MPI_INT,rayglobalinds,numrays,raystart,MPI_INT,0,MPI_COMM_WORLD);
+  #pragma omp parallel for
+  for(int n = 0; n < mynumray; n++)
+    messendbuff[n] = ray_h[n];
+  MPI_Gatherv(messendbuff,mynumray,MPI_FLOAT,mesrecvbuff,numrays,raystart,MPI_INT,0,MPI_COMM_WORLD);
+  if(myid==0){
+    #pragma omp parallel for
+    for(int n = 0; n < numray; n++)
+      meswritebuff[rayglobalinds[n]] = mesrecvbuff[n];
+    FILE *file = fopen("/gpfs/alpine/scratch/merth/csc362/sinogram_new.bin","wb");
+    fwrite(meswritebuff,sizeof(float),numray*FFACTOR,file);
+    fclose(file);
+    delete[] mesrecvbuff;
+    delete[] rayglobalinds;
+    delete[] meswritebuff;
+  }
+  delete[] messendbuff;
+
+  float *objrecvbuff;
+  float *objwritebuff;
+  int *pixglobalinds;
+  float *objsendbuff = new float[mynumpix];
+  if(myid == 0){
+    objrecvbuff = new float[numpix];
+    pixglobalinds = new int[numpix];
+    objwritebuff = new float[numpix];
+  }
+  MPI_Gatherv(pixglobalind,mynumpix,MPI_INT,pixglobalinds,numpixs,pixstart,MPI_INT,0,MPI_COMM_WORLD);
+  #pragma omp parallel for
+  for(int n = 0; n < mynumpix; n++)
+    objsendbuff[n] = obj_h[n];
+  MPI_Gatherv(objsendbuff,mynumpix,MPI_FLOAT,objrecvbuff,numpixs,pixstart,MPI_INT,0,MPI_COMM_WORLD);
+  if(myid==0){
+    #pragma omp parallel for
+    for(int n = 0; n < numpix; n++)
+      objwritebuff[pixglobalinds[n]] = objrecvbuff[n];
+    FILE *file = fopen("/gpfs/alpine/scratch/merth/csc362/object_new.bin","wb");
+    fwrite(objwritebuff,sizeof(float),numpix*FFACTOR,file);
+    fclose(file);
+    delete[] objrecvbuff;
+    delete[] pixglobalinds;
+    delete[] objwritebuff;
+  }
+  delete[] objsendbuff;*/
+
+  /*float *mesall = new float[numray*FFACTOR];
   #pragma omp parallel for
   for(int n = 0; n < numray*FFACTOR; n++)
     mesall[n] = 0.0;
@@ -478,8 +553,8 @@ int main(int argc, char** argv){
     fwrite(mesall,sizeof(float),numray*FFACTOR,mesf);
     fclose(mesf);
   }
-  delete[] mesall;
-  float *objall = new float[numpix*FFACTOR];
+  delete[] mesall;*/
+  /*float *objall = new float[numpix*FFACTOR];
   #pragma omp parallel for
   for(int n = 0; n < numpix*FFACTOR; n++)
     objall[n] = 0.0;
@@ -487,13 +562,13 @@ int main(int argc, char** argv){
     #pragma omp parallel for
     for(int n = 0; n < mynumpix; n++)
       objall[slice*numpix+pixglobalind[n]] = obj_h[slice*mynumpix+n];
-  MPI_Allreduce(MPI_IN_PLACE,objall,numpix*FFACTOR,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Reduce(MPI_IN_PLACE,objall,numpix*FFACTOR,MPI_FLOAT,MPI_SUM,0,MPI_COMM_WORLD);
   if(myid==0){
     FILE *objf = fopen("/gpfs/alpine/scratch/merth/csc362/object_new.bin","wb");
     fwrite(objall,sizeof(float),numpix*FFACTOR,objf);
     fclose(objf);
   }
-  delete[] objall;
+  delete[] objall;*/
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("Total Time: %e\n",MPI_Wtime()-timetot);
 

@@ -1,16 +1,16 @@
 #!/bin/bash
 
-export NUMTHE=1501
-export NUMRHO=2048
+export NUMTHE=1501 #shale 1501 chip 1210
+export NUMRHO=2048 #shale 2048 chip 2448
 #DOMAIN SIZE
-export NUMX=2048
-export NUMSLICE=16
-export BATCHSIZE=16
+export NUMSLICE=64 #shale 1792 chip 1024 (896)
+export STARTSLICE=896 #shale 0 chip 512 (962)
+export BATCHSIZE=64 #shale 256 chip 32
 #DOMAIN INFORMATION
-export XSTART=-1024
-export RHOSTART=-1024
+export XSTART=-1024 #shale -1024 chip -1224
+export RHOSTART=-1024 #shale -1024 chip -1204
 #SOLVER DATA
-export NUMITER=30
+export NUMITER=25
 #TILE SIZE (MUST BE POWER OF TWO)
 export SPATSIZE=128
 export SPECSIZE=128
@@ -20,8 +20,11 @@ export BACKBLOCK=1024
 export PROJBUFF=96 #KB
 export BACKBUFF=96 #KB
 
-export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1s.spectral.data
-export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1s.theta.data
+export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.spectral.data
+export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.theta.data
+#export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.spectral.data
+#export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.theta.data
+export OUTFILE=/gpfs/alpine/scratch/merth/csc362/recon_shale.bin
 
 export PROCPERNODE=1 #PROCS PER NODE
 export PROCPERSOCKET=1 #PROCS PER SOCKET
@@ -31,7 +34,7 @@ export PROCPERSOCKET=1 #PROCS PER SOCKET
 #mv /gpfs/alpine/scratch/merth/csc362/profile/timeline_*.nvvp .
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 

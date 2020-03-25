@@ -8,8 +8,9 @@
 
 #define FFACTOR 16 //FUSING FACTOR
 #define WARPSIZE 32 //WARPSIZE
-#define MATPREC float //MATRIX PRECISION
+#define MATPREC half //MATRIX PRECISION
 #define VECPREC float //VECTOR PRECISION
+#define COMPREC float //COMMUNICATION PRECISION
 
 using namespace std;
 
