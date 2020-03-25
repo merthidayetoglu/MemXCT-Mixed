@@ -34,7 +34,7 @@ export PROCPERSOCKET=1 #PROCS PER SOCKET
 #mv /gpfs/alpine/scratch/merth/csc362/profile/timeline_*.nvvp .
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
-jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 

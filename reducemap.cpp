@@ -4,7 +4,6 @@ extern int mynumray;
 extern int raynuminc;
 extern int raynumout;
 extern long raynumoutall;
-extern int *rayrecvlist;
 
 extern int *raysendstart;
 extern int *rayrecvstart;
@@ -64,25 +63,6 @@ extern int myid_node;
 extern int numnode;
 
 void reducemap(){
-  //FIND RAY-TO-RAY MAPPING
-  int *raynumray = new int[mynumray];
-  #pragma omp parallel for
-  for(int k = 0; k < mynumray; k++)
-    raynumray[k]=0;
-  for(int k = 0; k < raynuminc; k++)
-    raynumray[rayrecvlist[k]]++;
-  rayraystart = new int[mynumray+1];
-  rayraystart[0] = 0;
-  for(int k = 1; k < mynumray+1; k++)
-    rayraystart[k] = rayraystart[k-1] + raynumray[k-1];
-  rayrayind = new int[raynuminc];
-  #pragma omp parallel for
-  for(int k = 0; k < mynumray; k++)raynumray[k]=0;
-  for(int k = 0; k < raynuminc; k++){
-    rayrayind[rayraystart[rayrecvlist[k]]+raynumray[rayrecvlist[k]]] = k;
-    raynumray[rayrecvlist[k]]++;
-  }
-  delete[] raynumray;
   //SOCKET REDUCTION MAPS
   {
     int *socketmap = new int[raynuminc];

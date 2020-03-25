@@ -31,15 +31,13 @@ extern int raynumout;
 extern int mynumray;
 extern int mynumpix;
 
-extern int *raysendstart;
-extern int *rayrecvstart;
-extern int *raysendcount;
-extern int *rayrecvcount;
+int *raysendstart;
+int *rayrecvstart;
+int *raysendcount;
+int *rayrecvcount;
 
-extern int *rayraystart;
-extern int *rayrayind;
-
-extern int *rayrecvlist;
+int *rayraystart;
+int *rayrayind;
 
 extern int proj_blocksize;
 extern int proj_buffsize;
@@ -375,7 +373,7 @@ void preproc(){
   delete[] raynumouts;
   delete[] raynumincs;
   int *raysendlist = new int[raynumout];
-  rayrecvlist = new int[raynuminc];
+  int *rayrecvlist = new int[raynuminc];
   for(int p = 0; p < numproc; p++){
     #pragma omp parallel for
     for(int k = 0; k < rayrecvcount[p]; k++)
@@ -392,6 +390,27 @@ void preproc(){
     raycoorinc[k] = raycoor[rayrecvlist[k]];
   MPI_Alltoallv(raycoorinc,rayrecvcount,rayrecvstart,MPI_DOUBLE_COMPLEX,raycoorout,raysendcount,raysendstart,MPI_DOUBLE_COMPLEX,MPI_COMM_WORLD);
   delete[] raycoor;
+  //FIND RAY-TO-RAY MAPPING
+  int *raynumray = new int[mynumray];
+  #pragma omp parallel for
+  for(int k = 0; k < mynumray; k++)
+    raynumray[k]=0;
+  for(int k = 0; k < raynuminc; k++)
+    raynumray[rayrecvlist[k]]++;
+  rayraystart = new int[mynumray+1];
+  rayraystart[0] = 0;
+  for(int k = 1; k < mynumray+1; k++)
+    rayraystart[k] = rayraystart[k-1] + raynumray[k-1];
+  rayrayind = new int[raynuminc];
+  #pragma omp parallel for
+  for(int k = 0; k < mynumray; k++)raynumray[k]=0;
+  for(int k = 0; k < raynuminc; k++){
+    rayrayind[rayraystart[rayrecvlist[k]]+raynumray[rayrecvlist[k]]] = k;
+    raynumray[rayrecvlist[k]]++;
+  }
+  delete[] raynumray;
+  delete[] raysendlist;
+  delete[] rayrecvlist;
   //OBJECT MAPPING
   {
     extern int batchsize;

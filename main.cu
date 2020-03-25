@@ -63,16 +63,6 @@ int raynumout;
 int mynumray;
 int mynumpix;
 
-int *raysendstart;
-int *rayrecvstart;
-int *raysendcount;
-int *rayrecvcount;
-
-int *rayraystart;
-int *rayrayind;
-
-int *rayrecvlist;
-
 int numthreads;
 int numproc;
 int myid;
