@@ -61,23 +61,23 @@ extern int *rayunpackmap_d;
 extern int *noderaydispl_d;
 extern int *noderayindex_d;
 
-extern VECPREC *socketreducesendbuff_d;
-extern VECPREC *socketreducerecvbuff_d;
-extern VECPREC *nodereducesendbuff_d;
-extern VECPREC *nodereducerecvbuff_d;
-extern VECPREC *nodesendbuff_d;
-extern VECPREC *noderecvbuff_d;
-extern VECPREC *nodesendbuff_h;
-extern VECPREC *noderecvbuff_h;
+extern COMMPREC *socketreducesendbuff_d;
+extern COMMPREC *socketreducerecvbuff_d;
+extern COMMPREC *nodereducesendbuff_d;
+extern COMMPREC *nodereducerecvbuff_d;
+extern COMMPREC *nodesendbuff_d;
+extern COMMPREC *noderecvbuff_d;
+extern COMMPREC *nodesendbuff_h;
+extern COMMPREC *noderecvbuff_h;
 
 extern int numdevice;
 extern int mydevice;
 
 int *socketrecvbuffdispl_p;
-VECPREC **socketrecvbuff_p;
+COMMPREC **socketrecvbuff_p;
 int *socketrecvdevice_p;
 int *noderecvbuffdispl_p;
-VECPREC **noderecvbuff_p;
+COMMPREC **noderecvbuff_p;
 int *noderecvdevice_p;
 
 void communications(){
@@ -85,7 +85,7 @@ void communications(){
   MPI_Request sendrequest[numproc];
   MPI_Request recvrequest[numproc];
 
-  socketrecvbuff_p = new VECPREC*[numproc_socket];
+  socketrecvbuff_p = new COMMPREC*[numproc_socket];
   socketrecvbuffdispl_p = new int[numproc_socket];
   cudaIpcMemHandle_t sockethandle[numproc_socket];
   //RECEIVER SENDS MEMORY HANDLE
@@ -119,13 +119,13 @@ void communications(){
     double time = MPI_Wtime();
     for(int psend = 0; psend < numproc_socket; psend++){
       if(socketsendcomm[psend])
-        cudaMemcpyPeerAsync(socketrecvbuff_p[psend]+socketrecvbuffdispl_p[psend]*FFACTOR,socketrecvdevice_p[psend],socketreducesendbuff_d+socketsendcommdispl[psend]*FFACTOR,mydevice,sizeof(VECPREC)*socketsendcomm[psend]*FFACTOR);
+        cudaMemcpyPeerAsync(socketrecvbuff_p[psend]+socketrecvbuffdispl_p[psend]*FFACTOR,socketrecvdevice_p[psend],socketreducesendbuff_d+socketsendcommdispl[psend]*FFACTOR,mydevice,sizeof(COMMPREC)*socketsendcomm[psend]*FFACTOR);
     }
     cudaDeviceSynchronize();
     MPI_Barrier(MPI_COMM_SOCKET);
     if(myid==0)printf("socket warmup time %e\n",MPI_Wtime()-time);
   }
-  noderecvbuff_p = new VECPREC*[numproc_node];
+  noderecvbuff_p = new COMMPREC*[numproc_node];
   noderecvbuffdispl_p = new int[numproc_node];
   cudaIpcMemHandle_t nodehandle[numproc_node];
   //RECEIVER SENDS MEMORY HANDLE
@@ -170,7 +170,7 @@ void communications(){
     double time = MPI_Wtime();
     for(int psend = 0; psend < numproc_node; psend++){
       if(nodesendcomm[psend])
-        cudaMemcpyPeerAsync(noderecvbuff_p[psend]+noderecvbuffdispl_p[psend]*FFACTOR,noderecvdevice_p[psend],nodereducesendbuff_d+nodesendcommdispl[psend]*FFACTOR,mydevice,sizeof(VECPREC)*nodesendcomm[psend]*FFACTOR);
+        cudaMemcpyPeerAsync(noderecvbuff_p[psend]+noderecvbuffdispl_p[psend]*FFACTOR,noderecvdevice_p[psend],nodereducesendbuff_d+nodesendcommdispl[psend]*FFACTOR,mydevice,sizeof(COMMPREC)*nodesendcomm[psend]*FFACTOR);
     }
     cudaDeviceSynchronize();
     MPI_Barrier(MPI_COMM_NODE);
@@ -185,11 +185,11 @@ void communications(){
       int recvcount = 0;
       for(int p = 0; p < numproc; p++){
         if(nodereduceout[p]){
-          MPI_Isend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(VECPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+sendcount);
+          MPI_Isend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+sendcount);
           sendcount++;
         }
         if(nodereduceinc[p]){
-          MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(VECPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+recvcount);
+          MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+recvcount);
           recvcount++;
         }
       }

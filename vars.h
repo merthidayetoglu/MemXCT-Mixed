@@ -10,6 +10,7 @@
 #define WARPSIZE 32 //WARPSIZE
 #define MATPREC float //MATRIX PRECISION
 #define VECPREC float //VECTOR PRECISION
+#define COMMPREC float //COMM PRECISION
 
 using namespace std;
 

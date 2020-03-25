@@ -403,8 +403,8 @@ int main(int argc, char** argv){
     double projflop = proj_rownzall/1.0e9*2*(2*numiter)*numslice;
     double backflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
     double flop = projflop+backflop;
-    double projflopreal = (proj_warpnzall*WARPSIZE)/1.0e9*2*(2*numiter)*numslice;
-    double backflopreal = (back_warpnzall*WARPSIZE)/1.0e9*2*(numiter+1)*numslice;
+    double projflopreal = (proj_warpnzall*WARPSIZE)/1.0e9*2*numproj*FFACTOR;
+    double backflopreal = (back_warpnzall*WARPSIZE)/1.0e9*2*numback*FFACTOR;
     double flopreal = projflopreal+backflopreal;
     double projflops = projflop/pktime*numproc;
     double backflops = backflop/bktime*numproc;
@@ -420,8 +420,8 @@ int main(int argc, char** argv){
     double backsharedbw = backshared/bktime*numproc;
     double sharedbw = shared/(pktime+bktime)*numproc;
 
-    double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(VECPREC)+raynumoutall*(sizeof(VECPREC)+sizeof(int))+numray*sizeof(double)))/1.0e9*numproj;
-    double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*sizeof(VECPREC)+noderayoutall*(sizeof(VECPREC)+sizeof(int))+numpix*sizeof(double)))/1.0e9*numback;
+    double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(double)+raynumoutall*(sizeof(COMMPREC)+sizeof(int))))/1.0e9*numproj;
+    double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*(sizeof(COMMPREC)+sizeof(int))+numpix*sizeof(double)))/1.0e9*numback;
     double global = projglobal+backglobal;
     double projglobalbw = projglobal/pktime*numproc;
     double backglobalbw = backglobal/bktime*numproc;
@@ -443,9 +443,9 @@ int main(int argc, char** argv){
     printf("PERGPU pkernel %f bkernel %f agg %f GB/s GLOBAL\n",projglobalbw/numproc,backglobalbw/numproc,globalbw/numproc);
     printf("PERGPU pkernel %f bkernel %f agg %f GB/s SHARED\n",projsharedbw/numproc,backsharedbw/numproc,sharedbw/numproc);
     printf("\n");
-    double socketdata = 2.0*raynumoutall*sizeof(VECPREC)*(numproj+numback)/1.0e9*FFACTOR;
-    double nodedata = 2.0*socketrayoutall*sizeof(VECPREC)*(numproj+numback)/1.0e9*FFACTOR;
-    double hostdata = 2.0*noderayoutall*sizeof(VECPREC)*(numproj+numback)/1.0e9*FFACTOR;
+    double socketdata = 2.0*raynumoutall*sizeof(COMMPREC)*(numproj+numback)/1.0e9*FFACTOR;
+    double nodedata = 2.0*socketrayoutall*sizeof(COMMPREC)*(numproj+numback)/1.0e9*FFACTOR;
+    double hostdata = 2.0*noderayoutall*sizeof(COMMPREC)*(numproj+numback)/1.0e9*FFACTOR;
     double socketbw = socketdata/(pcstime+bcstime)*numproc;
     double nodebw = nodedata/(pcntime+bcntime)*numproc;
     double hostbw = hostdata/(pchtime+bchtime)*numproc;
