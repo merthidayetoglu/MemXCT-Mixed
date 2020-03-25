@@ -10,7 +10,6 @@
 #define WARPSIZE 32 //WARPSIZE
 #define MATPREC half //MATRIX PRECISION
 #define VECPREC float //VECTOR PRECISION
-#define COMPREC float //COMMUNICATION PRECISION
 
 using namespace std;
 
@@ -25,9 +24,9 @@ void findlength(double,double,double*,double*);
 void projection(double*,double*);
 void backproject(double*,double*);
 
-int encode(unsigned short, unsigned short);
-int xy2d (int n, int x, int y);
-void d2xy(int n, int d, int *x, int *y);
+int encode(unsigned short,unsigned short);
+int xy2d (int n,int x,int y);
+void d2xy(int n,int d,int *x,int *y);
 
 void setup_gpu(double**,double**,double**,double**,double**,double**);
 double norm_kernel(double*,int);

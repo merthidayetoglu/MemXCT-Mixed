@@ -238,7 +238,6 @@ int main(int argc, char** argv){
   preproc();
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("PREPROCESSING TIME: %e\n",MPI_Wtime()-timep);
-  return 0;
 
   double *obj_h;//OBJECT
   double *gra_h;//GRADIENT
@@ -296,30 +295,22 @@ int main(int argc, char** argv){
           else mes_h[slice*mynumray+k] = 0;
       }
       cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
-      //NORMALIZE
-      //extern int proj_maxnz;
-      //extern int back_maxnz;
-      //double mesmax = max_kernel(mes_h,mynumray*batchsize);
-      //double raymax = mesmax*back_maxnz*sqrt(2)*numx*sqrt(2);
-      //double scalefactor = 64e3/raymax;
-      //if(myid==0)printf("maximum possible: %e scale factor: %e\n",raymax,scalefactor);
-      //scale_kernel(mes_d,scalefactor,mynumray*batchsize);
+      cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
     //FIND GRADIENT
-    backproject(obj_d,mes_d);
-    cudaMemcpy(obj_h,obj_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
+    backproject(gra_d,mes_d);
+    cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
     double resnorm = norm_kernel(mes_h,mynumray*batchsize);
     double resmax = max_kernel(mes_h,mynumray*batchsize);
-    double gradnorm = norm_kernel(obj_h,mynumpix*batchsize);
-    double gradmax = max_kernel(obj_h,mynumpix*batchsize);
+    double gradnorm = norm_kernel(gra_h,mynumpix*batchsize);
+    double gradmax = max_kernel(gra_h,mynumpix*batchsize);
     double objnorm = 0.0;
     double objmax = 0.0;
     if(myid==0)printf("iter: %d resnorm: %e resmax: %e gradnorm: %e gradmax: %e objnorm: %e objmax: %e\n",0,resnorm,resmax,gradnorm,gradmax,objnorm,objmax);
     //SAVE DIRECTION
     double oldgradnorm = gradnorm;
-    copy_kernel(gra_d,obj_d,mynumpix*batchsize);
     copy_kernel(dir_d,gra_d,mynumpix*batchsize);
     copy_kernel(res_d,mes_d,mynumray*batchsize);
     //START ITERATIONS
@@ -480,64 +471,6 @@ int main(int argc, char** argv){
     printf("PERGPU MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numproc,socketbw/numproc,nodebw/numproc,hostbw/numproc);
     printf("\n");
   }
-  /*extern int *numpixs;
-  extern int *numrays;
-  extern int *pixstart;
-  extern int *raystart;
-
-  float *mesrecvbuff;
-  float *meswritebuff;
-  int *rayglobalinds;
-  float *messendbuff = new float[mynumray];
-  if(myid == 0){
-    mesrecvbuff = new float[numray];
-    rayglobalinds = new int[numray];
-    meswritebuff = new float[numray];
-  }
-  MPI_Gatherv(rayglobalind,mynumray,MPI_INT,rayglobalinds,numrays,raystart,MPI_INT,0,MPI_COMM_WORLD);
-  #pragma omp parallel for
-  for(int n = 0; n < mynumray; n++)
-    messendbuff[n] = ray_h[n];
-  MPI_Gatherv(messendbuff,mynumray,MPI_FLOAT,mesrecvbuff,numrays,raystart,MPI_INT,0,MPI_COMM_WORLD);
-  if(myid==0){
-    #pragma omp parallel for
-    for(int n = 0; n < numray; n++)
-      meswritebuff[rayglobalinds[n]] = mesrecvbuff[n];
-    FILE *file = fopen("/gpfs/alpine/scratch/merth/csc362/sinogram_new.bin","wb");
-    fwrite(meswritebuff,sizeof(float),numray*FFACTOR,file);
-    fclose(file);
-    delete[] mesrecvbuff;
-    delete[] rayglobalinds;
-    delete[] meswritebuff;
-  }
-  delete[] messendbuff;
-
-  float *objrecvbuff;
-  float *objwritebuff;
-  int *pixglobalinds;
-  float *objsendbuff = new float[mynumpix];
-  if(myid == 0){
-    objrecvbuff = new float[numpix];
-    pixglobalinds = new int[numpix];
-    objwritebuff = new float[numpix];
-  }
-  MPI_Gatherv(pixglobalind,mynumpix,MPI_INT,pixglobalinds,numpixs,pixstart,MPI_INT,0,MPI_COMM_WORLD);
-  #pragma omp parallel for
-  for(int n = 0; n < mynumpix; n++)
-    objsendbuff[n] = obj_h[n];
-  MPI_Gatherv(objsendbuff,mynumpix,MPI_FLOAT,objrecvbuff,numpixs,pixstart,MPI_INT,0,MPI_COMM_WORLD);
-  if(myid==0){
-    #pragma omp parallel for
-    for(int n = 0; n < numpix; n++)
-      objwritebuff[pixglobalinds[n]] = objrecvbuff[n];
-    FILE *file = fopen("/gpfs/alpine/scratch/merth/csc362/object_new.bin","wb");
-    fwrite(objwritebuff,sizeof(float),numpix*FFACTOR,file);
-    fclose(file);
-    delete[] objrecvbuff;
-    delete[] pixglobalinds;
-    delete[] objwritebuff;
-  }
-  delete[] objsendbuff;*/
 
   /*float *mesall = new float[numray*FFACTOR];
   #pragma omp parallel for

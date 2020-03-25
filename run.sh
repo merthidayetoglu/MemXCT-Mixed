@@ -3,9 +3,9 @@
 export NUMTHE=1501 #shale 1501 chip 1210
 export NUMRHO=2048 #shale 2048 chip 2448
 #DOMAIN SIZE
-export NUMSLICE=64 #shale 1792 chip 1024 (896)
+export NUMSLICE=16 #shale 1792 chip 1024 (896)
 export STARTSLICE=896 #shale 0 chip 512 (962)
-export BATCHSIZE=64 #shale 256 chip 32
+export BATCHSIZE=16 #shale 256 chip 32
 #DOMAIN INFORMATION
 export XSTART=-1024 #shale -1024 chip -1224
 export RHOSTART=-1024 #shale -1024 chip -1204
