@@ -10,7 +10,7 @@ export BATCHSIZE=16 #shale 256 chip 32
 export XSTART=-1024 #shale -1024 chip -1224
 export RHOSTART=-1024 #shale -1024 chip -1204
 #SOLVER DATA
-export NUMITER=25
+export NUMITER=30
 #TILE SIZE (MUST BE POWER OF TWO)
 export SPATSIZE=128
 export SPECSIZE=128
@@ -27,13 +27,14 @@ export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extr
 export OUTFILE=/gpfs/alpine/scratch/merth/csc362/recon_shale.bin
 
 export PROCPERNODE=1 #PROCS PER NODE
-export PROCPERSOCKET=1 #PROCS PER SOCKET
+export PROCPERSOCKET=3 #PROCS PER SOCKET
 
 #jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof -o /gpfs/alpine/scratch/merth/csc362/profile/timeline_%p.nvvp -f ./memxct
 #jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --analysis-metrics -o /gpfs/alpine/scratch/merth/csc362/profile/analysis_%p.nvvp -f ./memxct
 #mv /gpfs/alpine/scratch/merth/csc362/profile/timeline_*.nvvp .
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
+#jsrun --smpiargs="-gpu" -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1

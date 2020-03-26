@@ -286,6 +286,16 @@ int main(int argc, char** argv){
       }
       cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
       cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
+      {
+        extern double proj_rowmax;
+        extern double back_rowmax;
+        double mesmax = max_kernel(mes_h,mynumray*batchsize);
+        double maxpos = mesmax*back_rowmax*proj_rowmax;
+        double scale = 64.0e3/maxpos;
+        if(myid==0)printf("maxpos: %e scale: %e\n",maxpos,scale);
+        scale_kernel(mes_d,scale,mynumray*batchsize);
+        cudaMemcpy(mes_h,mes_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
+      }
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
@@ -397,8 +407,8 @@ int main(int argc, char** argv){
     extern long noderayoutall;
     double pother = ptime-prtime-pktime-pmtime-pcstime-pcntime-pcrtime-pchtime;
     double bother = btime-brtime-bktime-bmtime-bcstime-bcntime-bcrtime-bchtime;
-    printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pcstime,pcntime,pchtime,pmtime,prtime,pother,btime,bktime,bcstime,bcntime,bchtime,bmtime,prtime,bother);
-    printf("AGGREGATE total %e ( %e %e %e %e %e %e %e )\n",ptime+btime,pktime+bktime,pcstime+bcstime,pcntime+bcntime,pchtime+bchtime,pmtime+bmtime,prtime+brtime,pother+bother);
+    printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pmtime,pcstime,pcntime,pchtime,prtime,pother,btime,bktime,bmtime,bcstime,bcntime,bchtime,prtime,bother);
+    printf("AGGREGATE total %e ( %e %e %e %e %e %e %e )\n",ptime+btime,pktime+bktime,pmtime+bmtime,pcstime+bcstime,pcntime+bcntime,pchtime+bchtime,prtime+brtime,pother+bother);
     printf("NUMBER OF PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
     double projflop = proj_rownzall/1.0e9*2*(2*numiter)*numslice;
     double backflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;

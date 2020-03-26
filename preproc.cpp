@@ -1038,6 +1038,9 @@ void preproc(){
         }
       }
     }
+    double rowmax = numx*pixsize*sqrt(2);
+    if(myid==0)printf("rowmax: %e\n",rowmax);
+    proj_rowmax = rowmax;
   }
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("TIME: %e\n",MPI_Wtime()-time);
@@ -1048,9 +1051,11 @@ void preproc(){
     #pragma omp parallel for
     for(int n = 0; n < back_warpnztot*WARPSIZE; n++)
       back_warpvalue[n] = 0.0;
+    double rowmax = 0.0;
     #pragma omp parallel for
     for(int block = 0; block < back_numblocks; block++){
       for(int pix = block*back_blocksize; pix < (block+1)*back_blocksize && pix < mynumpix; pix++){
+        double reduce = 0.0;
         double domain[4];
         domain[0]=pixcoor[pix].real()-pixsize/2;
         domain[1]=domain[0]+pixsize;
@@ -1069,11 +1074,16 @@ void preproc(){
               double temp = 0;
               findlength(theta,rho,domain,&temp);
               back_warpvalue[ind] = temp;
+              reduce += temp;
             }
           }
         }
+        if(reduce>rowmax)rowmax=reduce;
       }
     }
+    MPI_Allreduce(MPI_IN_PLACE,&rowmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+    if(myid==0)printf("rowmax: %e\n",rowmax);
+    back_rowmax = rowmax;
   }
   delete[] raycoorout;
   delete[] raycoorinc;
