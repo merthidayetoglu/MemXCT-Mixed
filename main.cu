@@ -430,12 +430,24 @@ int main(int argc, char** argv){
     double backsharedbw = backshared/bktime*numproc;
     double sharedbw = shared/(pktime+bktime)*numproc;
 
-    double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(double)+raynumoutall*(sizeof(COMMPREC)+sizeof(int))))/1.0e9*numproj;
-    double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*(sizeof(COMMPREC)+sizeof(int))+numpix*sizeof(double)))/1.0e9*numback;
+    double projalgintshared = projflopreal/projshared;
+    double backalgintshared = backflopreal/backshared;
+    double aggalgintshared = flopreal/shared;
+
+    double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(VECPREC)+raynumoutall*(sizeof(COMMPREC)+sizeof(int))))/1.0e9*numproj;
+    double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*(sizeof(COMMPREC)+sizeof(int))+numpix*sizeof(VECPREC)))/1.0e9*numback;
     double global = projglobal+backglobal;
     double projglobalbw = projglobal/pktime*numproc;
     double backglobalbw = backglobal/bktime*numproc;
     double globalbw = (projglobal+backglobal)/(pktime+bktime)*numproc;
+
+    double projalgintglobal = projflopreal/projglobal;
+    double backalgintglobal = backflopreal/backglobal;
+    double aggalgintglobal = flopreal/global;
+
+    printf("\n");
+    printf("ALGINTENSITY pkernel %f bkernel %f agg %f GLOBAL\n",projalgintglobal,backalgintglobal,aggalgintglobal);
+    printf("ALGINTENSITY pkernel %f bkernel %f agg %f SHARED\n",projalgintshared,backalgintshared,aggalgintshared);
     printf("\n");
     printf("AGGREGATE pkernel %f (%f) bkernel %f (%f) agg %f (%f) TFLOPs\n",projflopreal/1.0e3,projflop/1.0e3,backflopreal/1.0e3,backflop/1.0e3,flopreal/1.0e3,flop/1.0e3);
     printf("AGGREGATE pkernel %f bkernel %f agg %f TB GLOBAL\n",projglobal/1.0e3,backglobal/1.0e3,global/1.0e3);

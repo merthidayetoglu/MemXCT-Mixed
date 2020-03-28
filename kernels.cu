@@ -147,6 +147,7 @@ int *rayunpackmap_d;
 int *noderaydispl_d;
 int *noderayindex_d;
 
+VECPREC *tomobuff_d;
 COMMPREC *socketreducesendbuff_d;
 COMMPREC *socketreducerecvbuff_d;
 COMMPREC *nodereducesendbuff_d;
@@ -163,12 +164,14 @@ extern int *noderecvbuffdispl_p;
 extern COMMPREC **noderecvbuff_p;
 extern int *noderecvdevice_p;
 
-__global__ void kernel_project __launch_bounds__(1024,1) (COMMPREC*,double*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int,int*);
-__global__ void kernel_backproject __launch_bounds__(1024,1) (double*,COMMPREC*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int,int*);
+__global__ void kernel_project __launch_bounds__(1024,1) (COMMPREC*,VECPREC*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int,int*);
+__global__ void kernel_backproject __launch_bounds__(1024,1) (VECPREC*,COMMPREC*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int,int*);
 __global__ void kernel_reduce(COMMPREC*,COMMPREC*,int*,int*,int,int,int*,int*);
 __global__ void kernel_reducenopack(double*,COMMPREC*,int*,int*,int,int,int*);
 __global__ void kernel_scatternopack(double*,COMMPREC*,int*,int*,int,int,int*);
 __global__ void kernel_scatter(COMMPREC*,COMMPREC*,int*,int*,int,int,int*,int*);
+__global__ void kernel_double2VECPREC(VECPREC*,double*,int);
+__global__ void kernel_VECPREC2double(double*,VECPREC*,int);
 
 int numdevice;
 int mydevice;
@@ -285,12 +288,14 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
 
   //COMMUNICATION BUFFERS
   double commem = 0.0;
+  commem += sizeof(VECPREC)*mynumpix*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*socketsendcommdispl[numproc_socket]*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*socketrecvcommdispl[numproc_socket]*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*nodesendcommdispl[numproc_node]*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*noderecvcommdispl[numproc_node]*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*nodereduceoutdispl[numproc]*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*nodereduceincdispl[numproc]*FFACTOR/1.0e9;
+  cudaMalloc((void**)&tomobuff_d,sizeof(VECPREC)*mynumpix*FFACTOR);
   cudaMalloc((void**)&socketreducesendbuff_d,sizeof(COMMPREC)*socketsendcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&socketreducerecvbuff_d,sizeof(COMMPREC)*socketrecvcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&nodereducesendbuff_d,sizeof(COMMPREC)*nodesendcommdispl[numproc_node]*FFACTOR);
@@ -378,9 +383,10 @@ void projection(double *sino_d, double *tomo_d){
   MPI_Barrier(MPI_COMM_WORLD);
   double projectiontime = MPI_Wtime();
   for(int slice = 0; slice < batchsize; slice += FFACTOR){
+    kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d+slice*mynumpix,mynumpix*FFACTOR);
     //PARTIAL PROJECTION
     cudaEventRecord(start);
-    kernel_project<<<proj_numblocks,proj_blocksize,sizeof(VECPREC)*proj_buffsize*FFACTOR>>>(socketreducesendbuff_d,tomo_d+slice*mynumpix,proj_warpindex_d,proj_warpvalue_d,raynumout,mynumpix,proj_buffdispl_d,proj_warpdispl_d,proj_mapdispl_d,proj_mapnz_d,proj_buffmap_d,proj_buffsize,socketpackmap_d);
+    kernel_project<<<proj_numblocks,proj_blocksize,sizeof(VECPREC)*proj_buffsize*FFACTOR>>>(socketreducesendbuff_d,tomobuff_d,proj_warpindex_d,proj_warpvalue_d,raynumout,mynumpix,proj_buffdispl_d,proj_warpdispl_d,proj_mapdispl_d,proj_mapnz_d,proj_buffmap_d,proj_buffsize,socketpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -478,7 +484,7 @@ void projection(double *sino_d, double *tomo_d){
     pmtime += milliseconds/1e3;
     //HOST REDUCTION
     cudaEventRecord(start);
-    kernel_reducenopack<<<(mynumray+255)/256,256>>>(sino_d+slice*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d);
+    kernel_reducenopack<<<(mynumray+255)/256,256>>>(sino_d+slice*mynumpix,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -593,19 +599,19 @@ void backproject(double *tomo_d, double *sino_d){
     //if(myid==0)printf("socket time %e\n",MPI_Wtime()-cstime);
     //BACKPROJECTION
     cudaEventRecord(start);
-    kernel_backproject<<<back_numblocks,back_blocksize,sizeof(VECPREC)*back_buffsize*FFACTOR>>>(tomo_d+slice*mynumpix,socketreducesendbuff_d,back_warpindex_d,back_warpvalue_d,mynumpix,raynumout,back_buffdispl_d,back_warpdispl_d,back_mapdispl_d,back_mapnz_d,back_buffmap_d,back_buffsize,socketpackmap_d);
+    kernel_backproject<<<back_numblocks,back_blocksize,sizeof(VECPREC)*back_buffsize*FFACTOR>>>(tomobuff_d,socketreducesendbuff_d,back_warpindex_d,back_warpvalue_d,mynumpix,raynumout,back_buffdispl_d,back_warpdispl_d,back_mapdispl_d,back_mapnz_d,back_buffmap_d,back_buffsize,socketpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
     //if(myid==0)printf("backproject %e milliseconds\n",milliseconds);
     bktime += milliseconds/1e3;
-
+    kernel_VECPREC2double<<<(mynumpix*FFACTOR+255)/256,256>>>(tomo_d+slice*mynumpix,tomobuff_d,mynumpix*FFACTOR);
     MPI_Barrier(MPI_COMM_WORLD);
     numback++;
   }
   btime += MPI_Wtime()-backprojtime;
 }
-__global__ void kernel_project(COMMPREC *y, double *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize, int *packmap){
+__global__ void kernel_project(COMMPREC *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize, int *packmap){
   extern __shared__ VECPREC shared[];
   VECPREC acc[FFACTOR] = {0.0};
   int wind = threadIdx.x%WARPSIZE;
@@ -620,8 +626,7 @@ __global__ void kernel_project(COMMPREC *y, double *x, unsigned short *index, MA
     int warp = (buff*blockDim.x+threadIdx.x)/WARPSIZE;
     for(int n = displ[warp]; n < displ[warp+1]; n++){
       unsigned short ind = index[n*WARPSIZE+wind];
-      //MATPREC val = value[n*WARPSIZE+wind];
-      float val = value[n*WARPSIZE+wind];
+      MATPREC val = value[n*WARPSIZE+wind];
       for(int f = 0; f < FFACTOR; f++)
         acc[f] += shared[f*buffsize+ind]*val;
     }
@@ -632,7 +637,7 @@ __global__ void kernel_project(COMMPREC *y, double *x, unsigned short *index, MA
     for(int f = 0; f < FFACTOR; f++)
       y[packmap[f*numrow+row]] = acc[f];
 }
-__global__ void kernel_backproject(double *y, COMMPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize, int *packmap){
+__global__ void kernel_backproject(VECPREC *y, COMMPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize, int *packmap){
   extern __shared__ VECPREC shared[];
   VECPREC acc[FFACTOR] = {0.0};
   int wind = threadIdx.x%WARPSIZE;
@@ -647,8 +652,7 @@ __global__ void kernel_backproject(double *y, COMMPREC *x, unsigned short *index
     int warp = (buff*blockDim.x+threadIdx.x)/WARPSIZE;
     for(int n = displ[warp]; n < displ[warp+1]; n++){
       unsigned short ind = index[n*WARPSIZE+wind];
-      //MATPREC val = value[n*WARPSIZE+wind];
-      float val = value[n*WARPSIZE+wind];
+      MATPREC val = value[n*WARPSIZE+wind];
       for(int f = 0; f < FFACTOR; f++)
         acc[f] += shared[f*buffsize+ind]*val;
     }
@@ -711,6 +715,16 @@ __global__ void kernel_scatter(COMMPREC *y, COMMPREC *x, int *displ, int *index,
     }
   }
 }
+__global__ void kernel_double2VECPREC(VECPREC *y, double *x,int dim){
+  int tid = blockIdx.x*blockDim.x+threadIdx.x;
+  if(tid < dim)
+    y[tid] = x[tid];
+};
+__global__ void kernel_VECPREC2double(double *y, VECPREC *x,int dim){
+  int tid = blockIdx.x*blockDim.x+threadIdx.x;
+  if(tid < dim)
+    y[tid] = x[tid];
+};
 void copy_kernel(double *a, double *b, int dim){
   cudaMemcpy(a,b,sizeof(double)*dim,cudaMemcpyDeviceToDevice);
 };

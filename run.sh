@@ -28,8 +28,8 @@ export BACKBUFF=96 #KB
 
 #export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.1s.spectral.data
 #export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.1s.theta.data
-export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.spectral.data
-export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.theta.data
+export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.sino.spectral.data
+export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.sino.theta.data
 #export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.spectral.data
 #export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.theta.data
 export OUTFILE=/gpfs/alpine/scratch/merth/csc362/recon_shale.bin
@@ -42,7 +42,7 @@ export PROCPERSOCKET=3 #PROCS PER SOCKET
 #jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --analysis-metrics -o /gpfs/alpine/scratch/merth/csc362/profile/analysis_%p.nvvp -f ./memxct
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
-jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 
