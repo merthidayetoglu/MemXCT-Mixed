@@ -47,9 +47,9 @@ extern int back_buffsize;
 
 
 double proj_rowmax;
-int proj_rownztot;
+long proj_rownztot;
 long proj_rownzall;
-int *proj_rowdispl;
+long *proj_rowdispl;
 int *proj_rowindex;
 int proj_numblocks;
 int proj_numbufftot;
@@ -68,7 +68,7 @@ bool *proj_warpindextag;
 MATPREC *proj_warpvalue;
 
 double back_rowmax;
-int *back_rowdispl;
+long *back_rowdispl;
 int *back_rowindex;
 int back_numblocks;
 int back_numbufftot;
@@ -287,8 +287,8 @@ void preproc(){
     rayglobalind[ind] = theglobalind*numrtile*specsize+rhoglobalind;
     if(theglobalind < numt && rhoglobalind < numr){
       raymesind[ind] = theglobalind*numr+rhoglobalind;
-      raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
-      //raycoor[ind] = complex<double>(rho,the);
+      //raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
+      raycoor[ind] = complex<double>(rho,the);
     }
     else{
       raycoor[ind].real(5*raylength);
@@ -481,18 +481,18 @@ void preproc(){
         findnumpix(theta,rho,&domain[0],&rownz[k]);
       }
     }
-    int *rowdispl = new int[raynumout+1];
+    long *rowdispl = new long[raynumout+1];
     rowdispl[0] = 0;
     for(int k = 1; k < raynumout+1; k++)
       rowdispl[k] = rowdispl[k-1]+rownz[k-1];
     delete[] rownz;
-    int rownztot = rowdispl[raynumout];
+    long rownztot = rowdispl[raynumout];
     long rownzall = rownztot;
     MPI_Allreduce(MPI_IN_PLACE,&rownzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    int *rownztots = new int[numproc];
-    MPI_Allgather(&rownztot,1,MPI_INT,rownztots,1,MPI_INT,MPI_COMM_WORLD);
-    int rownztotmin = rownztots[0];
-    int rownztotmax = rownztots[0];
+    long *rownztots = new long[numproc];
+    MPI_Allgather(&rownztot,1,MPI_INT,rownztots,1,MPI_LONG,MPI_COMM_WORLD);
+    long rownztotmin = rownztots[0];
+    long rownztotmax = rownztots[0];
     for(int p = 0; p < numproc; p++){
       if(rownztotmin>rownztots[p])rownztotmin=rownztots[p];
       if(rownztotmax<rownztots[p])rownztotmax=rownztots[p];
@@ -500,8 +500,8 @@ void preproc(){
     if(myid==0){
       printf("CSR STORAGE: %ld (%f GB)\n",rownzall,rownzall*(sizeof(MATPREC)+sizeof(int))/1.0e9);
       for(int p = 0; p < numproc; p++)
-        printf("proc: %d rownztot: %d (%f GB)\n",p,rownztots[p],rownztots[p]/1.0e9*(sizeof(MATPREC)+sizeof(int)));
-        printf("rownztotmin: %d rownztotmax: %d imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc));
+        printf("proc: %d rownztot: %ld (%f GB)\n",p,rownztots[p],rownztots[p]/1.0e9*(sizeof(MATPREC)+sizeof(int)));
+        printf("rownztotmin: %ld rownztotmax: %ld imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc));
     }
     delete[] rownztots;
     int *rowindex = new int[rownztot];
@@ -509,7 +509,7 @@ void preproc(){
     for(int k = 0; k < raynumout; k++){
       double rho = raycoorout[k].real();
       double theta = raycoorout[k].imag();
-      int start = rowdispl[k];
+      long start = rowdispl[k];
       for(int tile = spatstart[myid]; tile < spatstart[myid]+numspats[myid]; tile++){
         double domain[4];
         domain[0]=spatll[tile].real();
@@ -535,18 +535,18 @@ void preproc(){
   time = MPI_Wtime();
   if(myid==0)printf("CONSTRUCT BACKPROJECTION MATRIX\n");
   {
-    int *csrRowInd = new int[proj_rownztot];
+    long *csrRowInd = new long[proj_rownztot];
     int *inter = new int[(numthreads+1)*mynumpix];
     int *intra = new int[proj_rownztot];
     #pragma omp parallel for
     for(int k = 0; k < raynumout; k++)
-      for(int n = proj_rowdispl[k]; n < proj_rowdispl[k+1]; n++)
+      for(long n = proj_rowdispl[k]; n < proj_rowdispl[k+1]; n++)
         csrRowInd[n] = k;
     #pragma omp parallel for
     for(int n = 0; n < (numthreads+1)*mynumpix; n++)
       inter[n] = 0;
     #pragma omp parallel for
-    for(int n = 0; n < proj_rownztot; n++){
+    for(long n = 0; n < proj_rownztot; n++){
       intra[n] = inter[(omp_get_thread_num()+1)*mynumpix+proj_rowindex[n]];
       inter[(omp_get_thread_num()+1)*mynumpix+proj_rowindex[n]]++;
     }
@@ -554,14 +554,14 @@ void preproc(){
     for(int m = 0; m < mynumpix; m++)
       for(int t = 1; t < numthreads+1; t++)
         inter[t*mynumpix+m] = inter[t*mynumpix+m]+inter[(t-1)*mynumpix+m];
-    int *rowdispl = new int[mynumpix+1];
+    long *rowdispl = new long[mynumpix+1];
     rowdispl[0] = 0;
     for(int m = 1; m < mynumpix+1; m++)
       rowdispl[m] = rowdispl[m-1] + inter[numthreads*mynumpix+m-1];
-    int rownztot = rowdispl[mynumpix];
+    long rownztot = rowdispl[mynumpix];
     int *rowindex = new int[rownztot];
     #pragma omp parallel for
-    for(int n = 0; n < rownztot; n++){
+    for(long n = 0; n < rownztot; n++){
       rowindex[rowdispl[proj_rowindex[n]]+inter[omp_get_thread_num()*mynumpix+proj_rowindex[n]]+intra[n]] = csrRowInd[n];
     }
     delete[] inter;
@@ -576,7 +576,7 @@ void preproc(){
   if(myid==0)printf("\nBLOCKING PROJECTION MATRIX\n");
   {
     int *rowindex = proj_rowindex;
-    int *rowdispl = proj_rowdispl;
+    long *rowdispl = proj_rowdispl;
     int blocksize = proj_blocksize;
     int buffsize = proj_buffsize;
     int numblocks = raynumout/blocksize;
@@ -792,7 +792,7 @@ void preproc(){
   if(myid==0)printf("\nBLOCKING BACKPROJECTION MATRIX\n");
   {
     int *rowindex = back_rowindex;
-    int *rowdispl = back_rowdispl;
+    long *rowdispl = back_rowdispl;
     int blocksize = back_blocksize;
     int buffsize = back_buffsize;
     int numblocks = mynumpix/blocksize;

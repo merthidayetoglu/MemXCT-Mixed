@@ -1,14 +1,20 @@
 #!/bin/bash
 
-export NUMTHE=1501 #shale 1501 chip 1210
-export NUMRHO=2048 #shale 2048 chip 2448
+#BSUB -P CSC362
+#BSUB -W 01:00
+#BSUB -nnodes 4
+#BSUB -alloc_flags "gpudefault smt4"
+#BUSB -env "all,LSF_CPU_ISOLATION=on"
+
+export NUMTHE=1501 #shale 1501 chip 1210 charcoal 4500
+export NUMRHO=2048 #shale 2048 chip 2448 charcoal 6613
 #DOMAIN SIZE
-export NUMSLICE=16 #shale 1792 chip 1024 (896)
-export STARTSLICE=896 #shale 0 chip 512 (962)
+export NUMSLICE=32 #shale 1792 chip 1024 charcoal 4198
+export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal (2000)
 export BATCHSIZE=16 #shale 256 chip 32
 #DOMAIN INFORMATION
-export XSTART=-1024 #shale -1024 chip -1224
-export RHOSTART=-1024 #shale -1024 chip -1204
+export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5
+export RHOSTART=-1024 #shale -1024 chip -1204 charcoal 
 #SOLVER DATA
 export NUMITER=30
 #TILE SIZE (MUST BE POWER OF TWO)
@@ -20,22 +26,23 @@ export BACKBLOCK=1024
 export PROJBUFF=96 #KB
 export BACKBUFF=96 #KB
 
+#export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.1s.spectral.data
+#export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.1s.theta.data
 export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.spectral.data
 export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.theta.data
 #export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.spectral.data
 #export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.theta.data
 export OUTFILE=/gpfs/alpine/scratch/merth/csc362/recon_shale.bin
 
-export PROCPERNODE=1 #PROCS PER NODE
+export PROCPERNODE=6 #PROCS PER NODE
 export PROCPERSOCKET=3 #PROCS PER SOCKET
 
 #jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof -o /gpfs/alpine/scratch/merth/csc362/profile/timeline_%p.nvvp -f ./memxct
-#jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --analysis-metrics -o /gpfs/alpine/scratch/merth/csc362/profile/analysis_%p.nvvp -f ./memxct
 #mv /gpfs/alpine/scratch/merth/csc362/profile/timeline_*.nvvp .
+#jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --analysis-metrics -o /gpfs/alpine/scratch/merth/csc362/profile/analysis_%p.nvvp -f ./memxct
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
-#jsrun --smpiargs="-gpu" -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 
