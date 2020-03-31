@@ -259,6 +259,7 @@ int main(int argc, char** argv){
     objwritebuff = new float[numx*numy*batchsize];
   }
   float *mesdata = new float[numt*numr*batchsize];
+  if(myid==0)printf("INPUT FILE: %s\n",sinfile);
   if(myid==0)printf("OUTPUT FILE: %s\n",outfile);
   FILE *inputf;
   FILE *outputf;
@@ -325,10 +326,8 @@ int main(int argc, char** argv){
       //STEP SIZE
       double alpha = temp1/temp2;
       saxpy_kernel(obj_d,obj_d,alpha,dir_d,mynumpix*batchsize);
-      //FORWARD PROJECTION
-      projection(ray_d,obj_d);
       //FIND RESIDUAL ERROR
-      saxpy_kernel(res_d,mes_d,-1.0,ray_d,mynumray*batchsize);
+      saxpy_kernel(res_d,res_d,-alpha,ray_d,mynumray*batchsize);
       //FIND GRADIENT
       backproject(gra_d,res_d);
       cudaMemcpy(res_h,res_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
@@ -343,7 +342,6 @@ int main(int argc, char** argv){
       if(myid==0)printf("iter: %d resnorm: %e resmax: %e gradnorm: %e gradmax: %e objnorm: %e objmax: %e\n",iter,resnorm,resmax,gradnorm,gradmax,objnorm,objmax);
       //UPDATE DIRECTION
       double beta = gradnorm/oldgradnorm;
-      //double beta = 0;
       oldgradnorm = gradnorm;
       saxpy_kernel(dir_d,gra_d,beta,dir_d,mynumpix*batchsize);
     }
@@ -410,7 +408,7 @@ int main(int argc, char** argv){
     printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pcstime,pcntime,pchtime,pmtime,prtime,pother,btime,bktime,bcstime,bcntime,bchtime,bmtime,brtime,bother);
     printf("AGGREGATE total %e ( %e %e %e %e %e %e %e )\n",ptime+btime,pktime+bktime,pcstime+bcstime,pcntime+bcntime,pchtime+bchtime,pmtime+bmtime,prtime+brtime,pother+bother);
     printf("NUMBER OF PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
-    double projflop = proj_rownzall/1.0e9*2*(2*numiter)*numslice;
+    double projflop = proj_rownzall/1.0e9*2*(numiter)*numslice;
     double backflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
     double flop = projflop+backflop;
     double projflopreal = (proj_warpnzall*WARPSIZE)/1.0e9*2*numproj*FFACTOR;

@@ -652,7 +652,7 @@ __global__ void kernel_backproject(VECPREC *y, COMMPREC *x, unsigned short *inde
     int warp = (buff*blockDim.x+threadIdx.x)/WARPSIZE;
     for(int n = displ[warp]; n < displ[warp+1]; n++){
       unsigned short ind = index[n*WARPSIZE+wind];
-      MATPREC val = value[n*WARPSIZE+wind];
+      VECPREC val = value[n*WARPSIZE+wind];
       for(int f = 0; f < FFACTOR; f++)
         acc[f] += shared[f*buffsize+ind]*val;
     }

@@ -287,15 +287,15 @@ void preproc(){
     rayglobalind[ind] = theglobalind*numrtile*specsize+rhoglobalind;
     if(theglobalind < numt && rhoglobalind < numr){
       raymesind[ind] = theglobalind*numr+rhoglobalind;
-      //raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
-      raycoor[ind] = complex<double>(rho,the);
+      raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
+      //raycoor[ind] = complex<double>(rho,the);
     }
     else{
       raycoor[ind].real(5*raylength);
       raymesind[ind] = -1;
     }
   }
-  //delete[] mestheta;
+  delete[] mestheta;
   delete[] specll;
   if(myid==0)printf("DOMAIN PARTITIONING\n");
   rayrecvcount = new int[numproc];
