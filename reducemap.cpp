@@ -170,6 +170,12 @@ void reducemap(){
     //FIND SOCKET REDUCTION MAPPING SENDING SIDE
     socketreduceout = new int[numproc];
     #pragma omp parallel for
+    for(int p = 0; p < numproc; p++)
+      socketreduceout[p] = 0;
+    #pragma omp parallel for
+    for(int socket = 0; socket < numsocket; socket++)
+      socketreduceout[socket*numproc_socket+myid_socket] = socketrayinc[socket];
+    /*#pragma omp parallel for
     for(int socket = 0; socket < numsocket; socket++){
       int socketouttemp = (socketrayinc[socket]/numproc_socket)*numproc_socket;
       for(int p = socket*numproc_socket; p < (socket+1)*numproc_socket; p++){
@@ -179,7 +185,7 @@ void reducemap(){
           socketouttemp++;
         }
       }
-    }
+    }*/
     socketreduceoutdispl = new int[numproc+1];
     socketreduceoutdispl[0] = 0;
     for(int p = 1; p < numproc+1; p++)
@@ -449,6 +455,12 @@ void reducemap(){
     //FIND NODE REDUCTION MAPPING SENDING SIDE
     nodereduceout = new int[numproc];
     #pragma omp parallel for
+    for(int p = 0; p < numproc; p++)
+      nodereduceout[p] = 0;
+    #pragma omp parallel for
+    for(int node = 0; node < numnode; node++)
+      nodereduceout[node*numproc_node+myid_node] = noderayinc[node];
+    /*#pragma omp parallel for
     for(int node = 0; node < numnode; node++){
       int nodeouttemp = (noderayinc[node]/numproc_node)*numproc_node;
       for(int p = node*numproc_node; p < (node+1)*numproc_node; p++){
@@ -458,7 +470,7 @@ void reducemap(){
           nodeouttemp++;
         }
       }
-    }
+    }*/
     nodereduceoutdispl = new int[numproc+1];
     nodereduceoutdispl[0] = 0;
     for(int p = 1; p < numproc+1; p++)
