@@ -1,17 +1,18 @@
 #include "vars.h"
 
 extern double raylength;
-extern double pixsize;
 extern int numx;
 extern int numy;
 extern int spatsize;
 
 void findlength(double theta, double rho, double *d, double *length){
   //RAY'S VECTOR REPRESENTAION
-  double x = rho*cos(theta)+0.5*raylength*sin(theta);
-  double y = rho*sin(theta)-0.5*raylength*cos(theta);
-  double dx = -raylength*sin(theta);
-  double dy = +raylength*cos(theta);
+  double sintheta = sin(theta);
+  double costheta = cos(theta);
+  double x = rho*costheta+0.5*raylength*sintheta;
+  double y = rho*sintheta-0.5*raylength*costheta;
+  double dx = -raylength*sintheta;
+  double dy = +raylength*costheta;
   //TOP LEVEL
   double p[4] = {-dx,dx,-dy,dy};
   double q[4] = {x-d[0],d[1]-x,y-d[2],d[3]-y};
@@ -40,10 +41,12 @@ void findlength(double theta, double rho, double *d, double *length){
 
 void findnumpix(double theta, double rho, double *d, int *numpix){
   //RAY'S VECTOR REPRESENTAION
-  double x = rho*cos(theta)+0.5*raylength*sin(theta);
-  double y = rho*sin(theta)-0.5*raylength*cos(theta);
-  double dx = -raylength*sin(theta);
-  double dy = +raylength*cos(theta);
+  double sintheta = sin(theta);
+  double costheta = cos(theta);
+  double x = rho*costheta+0.5*raylength*sintheta;
+  double y = rho*sintheta-0.5*raylength*costheta;
+  double dx = -raylength*sintheta;
+  double dy = +raylength*costheta;
   //TOP LEVEL
   double p[4] = {-dx,dx,-dy,dy};
   double q[4] = {x-d[0],d[1]-x,y-d[2],d[3]-y};
@@ -75,29 +78,29 @@ void findnumpix(double theta, double rho, double *d, int *numpix){
     int inity = 0;
     if(inid == 0){ //LEFT
       initx = 0;
-      inity = (int)((y+u1*dy-d[2])/pixsize);
+      inity = (int)(y+u1*dy-d[2]);
     }
     if(inid == 1){ //RIGHT
-      initx = (int)((d[1]-d[0]-pixsize/2)/pixsize);
-      inity = (int)((y+u1*dy-d[2])/pixsize);
+      initx = (int)(d[1]-d[0]-0.5);
+      inity = (int)(y+u1*dy-d[2]);
     }
     if(inid == 2){ //BOTTOM
-      initx = (int)((x+u1*dx-d[0])/pixsize);
+      initx = (int)(x+u1*dx-d[0]);
       inity = 0;
     }
     if(inid == 3){ //TOP
-      initx = (int)((x+u1*dx-d[0])/pixsize);
-      inity = (int)((d[3]-d[2]-pixsize/2)/pixsize);
+      initx = (int)(x+u1*dx-d[0]);
+      inity = (int)(d[3]-d[2]-0.5);
     }
-    double px = d[0]+initx*pixsize+pixsize/2;
-    double py = d[2]+inity*pixsize+pixsize/2;
+    double px = d[0]+initx+0.5;
+    double py = d[2]+inity+0.5;
     //TRACE RAY WHILE IT IS IN THE DOMAIN
     while(px > d[0] && px < d[1] && py < d[3] && py > d[2]){
       int exid = 0;
-      q[0] = x-(px-pixsize/2);
-      q[1] = (px+pixsize/2)-x;
-      q[2] = y-(py-pixsize/2);
-      q[3] = (py+pixsize/2)-y;
+      q[0] = x-(px-0.5);
+      q[1] = (px+0.5)-x;
+      q[2] = y-(py-0.5);
+      q[3] = (py+0.5)-y;
       u1 = 0;
       u2 = 1;
       for(int k = 0; k < 4; k++){
@@ -115,19 +118,19 @@ void findnumpix(double theta, double rho, double *d, int *numpix){
       //FIND NEXT PIXEL
       if(exid == 0){
         initx = initx-1;
-        px = px - pixsize;
+        px = px - 1.0;
       }
       if(exid == 1){
         initx = initx+1;
-        px = px + pixsize;
+        px = px + 1.0;
       }
       if(exid == 2){
         inity = inity-1;
-        py = py - pixsize;
+        py = py - 1.0;
       }
       if(exid == 3){
         inity = inity+1;
-        py = py + pixsize;
+        py = py + 1.0;
       }
     }
   }
@@ -135,10 +138,12 @@ void findnumpix(double theta, double rho, double *d, int *numpix){
 
 void findpixind(double theta, double rho, double *d, int *numpix, int offset, int *pixind){
   //RAY'S VECTOR REPRESENTAION
-  double x = rho*cos(theta)+0.5*raylength*sin(theta);
-  double y = rho*sin(theta)-0.5*raylength*cos(theta);
-  double dx = -raylength*sin(theta);
-  double dy = +raylength*cos(theta);
+  double sintheta = sin(theta);
+  double costheta = cos(theta);
+  double x = rho*costheta+0.5*raylength*sintheta;
+  double y = rho*sintheta-0.5*raylength*costheta;
+  double dx = -raylength*sintheta;
+  double dy = +raylength*costheta;
   //TOP LEVEL
   double p[4] = {-dx,dx,-dy,dy};
   double q[4] = {x-d[0],d[1]-x,y-d[2],d[3]-y};
@@ -170,29 +175,29 @@ void findpixind(double theta, double rho, double *d, int *numpix, int offset, in
     int inity = 0;
     if(inid == 0){ //LEFT
       initx = 0;
-      inity = (int)((y+u1*dy-d[2])/pixsize);
+      inity = (int)(y+u1*dy-d[2]);
     }
     if(inid == 1){ //RIGHT
-      initx = (int)((d[1]-d[0]-pixsize/2)/pixsize);
-      inity = (int)((y+u1*dy-d[2])/pixsize);
+      initx = (int)(d[1]-d[0]-0.5);
+      inity = (int)(y+u1*dy-d[2]);
     }
     if(inid == 2){ //BOTTOM
-      initx = (int)((x+u1*dx-d[0])/pixsize);
+      initx = (int)(x+u1*dx-d[0]);
       inity = 0;
     }
     if(inid == 3){ //TOP
-      initx = (int)((x+u1*dx-d[0])/pixsize);
-      inity = (int)((d[3]-d[2]-pixsize/2)/pixsize);
+      initx = (int)(x+u1*dx-d[0]);
+      inity = (int)(d[3]-d[2]-0.5);
     }
-    double px = d[0]+initx*pixsize+pixsize/2;
-    double py = d[2]+inity*pixsize+pixsize/2;
+    double px = d[0]+initx+0.5;
+    double py = d[2]+inity+0.5;
     //TRACE RAY WHILE IT IS IN THE DOMAIN
     while(px > d[0] && px < d[1] && py < d[3] && py > d[2]){
       int exid = 0;
-      q[0] = x-(px-pixsize/2);
-      q[1] = (px+pixsize/2)-x;
-      q[2] = y-(py-pixsize/2);
-      q[3] = (py+pixsize/2)-y;
+      q[0] = x-(px-0.5);
+      q[1] = (px+0.5)-x;
+      q[2] = y-(py-0.5);
+      q[3] = (py+0.5)-y;
       u1 = 0;
       u2 = 1;
       for(int k = 0; k < 4; k++){
@@ -214,19 +219,19 @@ void findpixind(double theta, double rho, double *d, int *numpix, int offset, in
       //FIND NEXT PIXEL
       if(exid == 0){
         initx = initx-1;
-        px = px - pixsize;
+        px = px - 1.0;
       }
       if(exid == 1){
         initx = initx+1;
-        px = px + pixsize;
+        px = px + 1.0;
       }
       if(exid == 2){
         inity = inity-1;
-        py = py - pixsize;
+        py = py - 1.0;
       }
       if(exid == 3){
         inity = inity+1;
-        py = py + pixsize;
+        py = py + 1.0;
       }
     }
   }

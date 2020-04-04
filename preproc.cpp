@@ -142,8 +142,8 @@ void preproc(){
       //ind = ytile*numxtile+xtile;
       //ind = encode(xtile,ytile);
       ind = xy2d (lspatdim,xtile,ytile);
-    double x = xstart+xtile*spatsize*pixsize;
-    double y = ystart+ytile*spatsize*pixsize;
+    double x = xstart+xtile*spatsize;
+    double y = ystart+ytile*spatsize;
     spatlltemp[ind]=complex<double>(x,y);
   }
   complex<double> *spatll = new complex<double>[numspattile];
@@ -256,12 +256,12 @@ void preproc(){
     int pixlocy = pixloc/spatsize;
     int pixlocx = pixloc%spatsize;
     int  ind = tile*spatsize*spatsize + xy2d(spatsize,pixlocx,pixlocy);
-    double x = spatll[spatstart[myid]+tile].real()+pixsize/2+pixlocx*pixsize;
-    double y = spatll[spatstart[myid]+tile].imag()+pixsize/2+pixlocy*pixsize;
+    double x = spatll[spatstart[myid]+tile].real()+0.5+pixlocx;
+    double y = spatll[spatstart[myid]+tile].imag()+0.5+pixlocy;
     pixcoor[ind] = complex<double>(x,y);
     //GLOBAL SPATIAL INDEX (EXTENDED)
-    int xglobalind = (int)((x-xstart)/pixsize);
-    int yglobalind = (int)((y-ystart)/pixsize);
+    int xglobalind = (int)(x-xstart);
+    int yglobalind = (int)(y-ystart);
     pixglobalind[ind] = yglobalind*numxtile*spatsize+xglobalind;
     if(xglobalind < numx && yglobalind < numy)
       pixobjind[ind] = yglobalind*numx+xglobalind;
@@ -319,12 +319,12 @@ void preproc(){
       for(int tile = spatstart[p]; tile < spatstart[p]+numspats[p]; tile++){
         double domain[4];
         domain[0]=spatll[tile].real();
-        domain[1]=domain[0]+spatsize*pixsize;
+        domain[1]=domain[0]+spatsize;
         domain[2]=spatll[tile].imag();
-        domain[3]=domain[2]+spatsize*pixsize;
+        domain[3]=domain[2]+spatsize;
         //REMOVE SPATIAL EDGE CONDITION
-        if(domain[1] > xstart+numx*pixsize)domain[1]=xstart+numx*pixsize;
-        if(domain[3] > ystart+numy*pixsize)domain[3]=ystart+numy*pixsize;
+        if(domain[1] > xstart+numx)domain[1]=xstart+numx;
+        if(domain[3] > ystart+numy)domain[3]=ystart+numy;
         findlength(theta,rho,&domain[0],&lengthtemp[k]);
       }
     }
@@ -478,12 +478,12 @@ void preproc(){
       for(int tile = spatstart[myid]; tile < spatstart[myid]+numspats[myid]; tile++){
         double domain[4];
         domain[0]=spatll[tile].real();
-        domain[1]=domain[0]+spatsize*pixsize;
+        domain[1]=domain[0]+spatsize;
         domain[2]=spatll[tile].imag();
-        domain[3]=domain[2]+spatsize*pixsize;
+        domain[3]=domain[2]+spatsize;
         //REMOVE SPATIAL EDGE CONDITION
-        if(domain[1] > xstart+numx*pixsize)domain[1]=xstart+numx*pixsize;
-        if(domain[3] > ystart+numy*pixsize)domain[3]=ystart+numy*pixsize;
+        if(domain[1] > xstart+numx)domain[1]=xstart+numx;
+        if(domain[3] > ystart+numy)domain[3]=ystart+numy;
         findnumpix(theta,rho,&domain[0],&rownz[k]);
       }
     }
@@ -519,12 +519,12 @@ void preproc(){
       for(int tile = spatstart[myid]; tile < spatstart[myid]+numspats[myid]; tile++){
         double domain[4];
         domain[0]=spatll[tile].real();
-        domain[1]=domain[0]+spatsize*pixsize;
+        domain[1]=domain[0]+spatsize;
         domain[2]=spatll[tile].imag();
-        domain[3]=domain[2]+spatsize*pixsize;
+        domain[3]=domain[2]+spatsize;
         //REMOVE SPATIAL EDGE CONDITION
-        if(domain[1] > xstart+numx*pixsize)domain[1]=xstart+numx*pixsize;
-        if(domain[3] > ystart+numy*pixsize)domain[3]=ystart+numy*pixsize;
+        if(domain[1] > xstart+numx)domain[1]=xstart+numx;
+        if(domain[3] > ystart+numy)domain[3]=ystart+numy;
         int offset = (tile-spatstart[myid])*spatsize*spatsize;
         int pixtemp = 0;
         findpixind(theta,rho,&domain[0],&pixtemp,offset,&rowindex[start]);
@@ -1075,12 +1075,13 @@ void preproc(){
               #endif
               int pixind = proj_buffmap[mapind];
               double domain[4];
-              domain[0]=pixcoor[pixind].real()-pixsize/2;
-              domain[1]=domain[0]+pixsize;
-              domain[2]=pixcoor[pixind].imag()-pixsize/2;
-              domain[3]=domain[2]+pixsize;
+              domain[0]=pixcoor[pixind].real()-0.5;
+              domain[1]=domain[0]+1.0;
+              domain[2]=pixcoor[pixind].imag()-0.5;
+              domain[3]=domain[2]+1.0;
               double temp = 0;
               findlength(theta,rho,domain,&temp);
+              temp *= pixsize;
               if((MATPREC)temp==0.0)
                 #pragma omp atomic
                 underflow++;
@@ -1120,10 +1121,10 @@ void preproc(){
       for(int pix = block*back_blocksize; pix < (block+1)*back_blocksize && pix < mynumpix; pix++){
         double reduce = 0.0;
         double domain[4];
-        domain[0]=pixcoor[pix].real()-pixsize/2;
-        domain[1]=domain[0]+pixsize;
-        domain[2]=pixcoor[pix].imag()-pixsize/2;
-        domain[3]=domain[2]+pixsize;
+        domain[0]=pixcoor[pix].real()-0.5;
+        domain[1]=domain[0]+1.0;
+        domain[2]=pixcoor[pix].imag()-0.5;
+        domain[3]=domain[2]+1.0;
         int n = pix%back_blocksize;
         for(int buff = back_buffdispl[block]; buff < back_buffdispl[block+1]; buff++){
           int warp = (buff*back_blocksize+n)/WARPSIZE;
@@ -1140,6 +1141,7 @@ void preproc(){
               double theta = raycoorout[rayind].imag();
               double temp = 0;
               findlength(theta,rho,domain,&temp);
+              temp *= pixsize;
               if((MATPREC)temp==0.0)
                 #pragma omp atomic
                 underflow++;

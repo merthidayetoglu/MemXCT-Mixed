@@ -447,8 +447,8 @@ int main(int argc, char** argv){
     double backalgintshared = backflopreal/backshared;
     double aggalgintshared = flopreal/shared;
 
-    double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(VECPREC)+raynumoutall*(sizeof(COMMPREC)+sizeof(int))))/1.0e9*numproj;
-    double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*(sizeof(COMMPREC)+sizeof(int))+numpix*sizeof(VECPREC)))/1.0e9*numback;
+    double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+FFACTOR*sizeof(VECPREC)*((double)proj_mapnzall+raynumoutall))/1.0e9*numproj;
+    double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+FFACTOR*sizeof(VECPREC)*((double)back_mapnzall+numpix))/1.0e9*numback;
 
     double global = projglobal+backglobal;
     double projglobalbw = projglobal/pktime*numproc;

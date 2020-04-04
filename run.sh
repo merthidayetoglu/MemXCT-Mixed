@@ -13,7 +13,7 @@ export NUMSLICE=32 #shale 1792 chip 1024 charcoal 4198 brain 9209
 export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
 export BATCHSIZE=16 #shale 256 chip 32
 #DOMAIN INFORMATION
-export PIXSIZE=1 
+export PIXSIZE=1
 export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5 brain 5641.5
 export RHOSTART=-1024
 #charcoal     [0,997): -3316
@@ -63,188 +63,16 @@ jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 
-cp var_1 vars.h
-make clean
-make -j
-export NUMSLICE=1
-export BATCHSIZE=1
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_2 vars.h
-make clean
-make -j
-export NUMSLICE=2
-export BATCHSIZE=2
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_4 vars.h
-make clean
-make -j
-export NUMSLICE=4
-export BATCHSIZE=4
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_6 vars.h
-make clean
-make -j
-export NUMSLICE=6
-export BATCHSIZE=6
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_8 vars.h
-make clean
-make -j
-export NUMSLICE=8
-export BATCHSIZE=8
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_10 vars.h
-make clean
-make -j
-export NUMSLICE=10
-export BATCHSIZE=10
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_12 vars.h
-make clean
-make -j
-export NUMSLICE=12
-export BATCHSIZE=12
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_14 vars.h
-make clean
-make -j
-export NUMSLICE=14
-export BATCHSIZE=14
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_16 vars.h
-make clean
-make -j
-export NUMSLICE=16
-export BATCHSIZE=16
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_18 vars.h
-make clean
-make -j
-export NUMSLICE=18
-export BATCHSIZE=18
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_20 vars.h
-make clean
-make -j
-export NUMSLICE=20
-export BATCHSIZE=20
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_22 vars.h
-make clean
-make -j
-export NUMSLICE=22
-export BATCHSIZE=22
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_24 vars.h
-make clean
-make -j
-export NUMSLICE=24
-export BATCHSIZE=24
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_26 vars.h
-make clean
-make -j
-export NUMSLICE=26
-export BATCHSIZE=26
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_28 vars.h
-make clean
-make -j
-export NUMSLICE=28
-export BATCHSIZE=28
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_30 vars.h
-make clean
-make -j
-export NUMSLICE=30
-export BATCHSIZE=30
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_32 vars.h
-make clean
-make -j
-export NUMSLICE=32
-export BATCHSIZE=32
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_34 vars.h
-make clean
-make -j
-export NUMSLICE=34
-export BATCHSIZE=34
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_36 vars.h
-make clean
-make -j
-export NUMSLICE=36
-export BATCHSIZE=36
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_38 vars.h
-make clean
-make -j
-export NUMSLICE=38
-export BATCHSIZE=38
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_40 vars.h
-make clean
-make -j
-export NUMSLICE=40
-export BATCHSIZE=40
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_42 vars.h
-make clean
-make -j
-export NUMSLICE=42
-export BATCHSIZE=42
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_44 vars.h
-make clean
-make -j
-export NUMSLICE=44
-export BATCHSIZE=44
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_46 vars.h
-make clean
-make -j
-export NUMSLICE=46
-export BATCHSIZE=46
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_48 vars.h
-make clean
-make -j
-export NUMSLICE=48
-export BATCHSIZE=48
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-cp var_50 vars.h
-make clean
-make -j
-export NUMSLICE=50
-export BATCHSIZE=50
-sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+for i in 1 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50
+do
+  cp factor_$i factor
+  make clean
+  make -j
+  export NUMSLICE=$i
+  export BATCHSIZE=$i
+  sleep 1
+  jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+done
 
 #export PROCPERNODE=1 #PROCS PER NODE
 #export PROCPERSOCKET=1 #PROCS PER SOCKET

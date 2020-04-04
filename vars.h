@@ -11,8 +11,8 @@
 #define MATPREC half //MATRIX PRECISION
 #define VECPREC half //VECTOR PRECISION
 #define COMMPREC half //COMMUNICATION PRECISION
-#define MIXED
 #define MATRIX
+#define MIXED
 
 struct matrix{
   unsigned short ind;
