@@ -8,9 +8,16 @@
 
 #define FFACTOR 16 //FUSING FACTOR
 #define WARPSIZE 32 //WARPSIZE
-#define MATPREC float //MATRIX PRECISION
-#define VECPREC float //VECTOR PRECISION
-#define COMMPREC float //COMMUNICATION PRECISION
+#define MATPREC half //MATRIX PRECISION
+#define VECPREC half //VECTOR PRECISION
+#define COMMPREC half //COMMUNICATION PRECISION
+#define MIXED
+#define MATRIX
+
+struct matrix{
+  unsigned short ind;
+  MATPREC val;
+};
 
 using namespace std;
 

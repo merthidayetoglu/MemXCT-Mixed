@@ -56,16 +56,14 @@ int proj_numbufftot;
 int proj_numbuffall;
 int *proj_buffdispl;
 int proj_mapnztot;
-int proj_mapnzall;
+long proj_mapnzall;
 int *proj_mapdispl;
 int *proj_mapnz;
 int *proj_buffmap;
 int proj_warpnztot;
 long proj_warpnzall;
 int *proj_warpdispl;
-unsigned short *proj_warpindex;
 bool *proj_warpindextag;
-MATPREC *proj_warpvalue;
 
 double back_rowmax;
 long *back_rowdispl;
@@ -75,22 +73,30 @@ int back_numbufftot;
 int back_numbuffall;
 int *back_buffdispl;
 int back_mapnztot;
-int back_mapnzall;
+long back_mapnzall;
 int *back_mapdispl;
 int *back_mapnz;
 int *back_buffmap;
 int back_warpnztot;
 long back_warpnzall;
 int *back_warpdispl;
-unsigned short *back_warpindex;
 bool *back_warpindextag;
+#ifdef MATRIX
+matrix *proj_warpindval;
+matrix *back_warpindval;
+#else
+unsigned short *proj_warpindex;
+MATPREC *proj_warpvalue;
+unsigned short *back_warpindex;
 MATPREC *back_warpvalue;
+#endif
 
 int *rayglobalind;
 int *pixglobalind;
 int *raymesind;
 int *pixobjind;
 int *objglobalind;
+int *mesglobalind;
 
 complex<double> *pixcoor;
 complex<double> *raycoor;
@@ -724,11 +730,19 @@ void preproc(){
       printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc));
     }
     delete[] warpnztots;
+    #ifdef MATRIX
+    matrix *warpindval = new matrix[warpnztot*WARPSIZE];
+    #else
     unsigned short *warpindex = new unsigned short[warpnztot*WARPSIZE];
+    #endif
     bool *warpindextag = new bool[warpnztot*WARPSIZE];
     #pragma omp parallel for
     for(int n = 0; n < warpnztot*WARPSIZE; n++){
+      #ifdef MATRIX
+      warpindval[n].ind = 0;
+      #else
       warpindex[n] = 0;
+      #endif
       warpindextag[n] = false;
     }
     #pragma omp parallel
@@ -760,7 +774,11 @@ void preproc(){
             int indloc = m%blocksize;
             int warp = ((buffdispl[block]+buffloc)*blocksize+indloc)/WARPSIZE;
             int ind = (warpdispl[warp]+count[indloc])*WARPSIZE+m%WARPSIZE;
+            #ifdef MATRIX
+            warpindval[ind].ind = numind[rowindex[n]];
+            #else
             warpindex[ind] = numind[rowindex[n]];
+            #endif
             warpindextag[ind] = true;
             count[indloc]++;
           }
@@ -784,7 +802,11 @@ void preproc(){
     proj_warpnztot = warpnztot;
     proj_warpnzall = warpnzall;
     proj_warpdispl = warpdispl;
+    #ifdef MATRIX
+    proj_warpindval = warpindval;
+    #else
     proj_warpindex = warpindex;
+    #endif
     proj_warpindextag = warpindextag;
   }
   MPI_Barrier(MPI_COMM_WORLD);
@@ -940,11 +962,19 @@ void preproc(){
       printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc));
     }
     delete[] warpnztots;
+    #ifdef MATRIX
+    matrix *warpindval = new matrix[warpnztot*WARPSIZE];
+    #else
     unsigned short *warpindex = new unsigned short[warpnztot*WARPSIZE];
+    #endif
     bool *warpindextag = new bool[warpnztot*WARPSIZE];
     #pragma omp parallel for
     for(int n = 0; n < warpnztot*WARPSIZE; n++){
+      #ifdef MATRIX
+      warpindval[n].ind = 0;
+      #else
       warpindex[n] = 0;
+      #endif
       warpindextag[n] = false;
     }
     #pragma omp parallel
@@ -976,7 +1006,11 @@ void preproc(){
             int indloc = m%blocksize;
             int warp = ((buffdispl[block]+buffloc)*blocksize+indloc)/WARPSIZE;
             int ind = (warpdispl[warp]+count[indloc])*WARPSIZE+m%WARPSIZE;
+            #ifdef MATRIX
+            warpindval[ind].ind = numind[rowindex[n]];
+            #else
             warpindex[ind] = numind[rowindex[n]];
+            #endif
             warpindextag[ind] = true;
             count[indloc]++;
           }
@@ -1000,7 +1034,11 @@ void preproc(){
     back_warpnztot = warpnztot;
     back_warpnzall = warpnzall;
     back_warpdispl = warpdispl;
+    #ifdef MATRIX
+    back_warpindval = warpindval;
+    #else
     back_warpindex = warpindex;
+    #endif
     back_warpindextag = warpindextag;
   }
   MPI_Barrier(MPI_COMM_WORLD);
@@ -1008,10 +1046,17 @@ void preproc(){
   time = MPI_Wtime();
   if(myid==0)printf("\nFILL PROJECTION MATRIX\n");
   {
+    #ifndef MATRIX
     proj_warpvalue = new MATPREC[proj_warpnztot*WARPSIZE];
+    #endif
     #pragma omp parallel for
     for(int n = 0; n < proj_warpnztot*WARPSIZE; n++)
+      #ifdef MATRIX
+      proj_warpindval[n].val = 0.0;
+      #else
       proj_warpvalue[n] = 0.0;
+      #endif
+    int underflow = 0;
     #pragma omp parallel for
     for(int block = 0; block < proj_numblocks; block++){
       for(int ray = block*proj_blocksize; ray < (block+1)*proj_blocksize && ray < raynumout; ray++){
@@ -1023,7 +1068,11 @@ void preproc(){
           for(int row = proj_warpdispl[warp]; row < proj_warpdispl[warp+1]; row++){
             int ind = row*WARPSIZE+n%WARPSIZE;
             if(proj_warpindextag[ind]){
+              #ifdef MATRIX
+              int mapind = proj_mapdispl[buff]+proj_warpindval[ind].ind;
+              #else
               int mapind = proj_mapdispl[buff]+proj_warpindex[ind];
+              #endif
               int pixind = proj_buffmap[mapind];
               double domain[4];
               domain[0]=pixcoor[pixind].real()-pixsize/2;
@@ -1032,14 +1081,21 @@ void preproc(){
               domain[3]=domain[2]+pixsize;
               double temp = 0;
               findlength(theta,rho,domain,&temp);
+              if((MATPREC)temp==0.0)
+                #pragma omp atomic
+                underflow++;
+              #ifdef MATRIX
+              proj_warpindval[ind].val = temp;
+              #else
               proj_warpvalue[ind] = temp;
+              #endif
             }
           }
         }
       }
     }
     double rowmax = numx*pixsize*sqrt(2);
-    if(myid==0)printf("rowmax: %e\n",rowmax);
+    if(myid==0)printf("rowmax: %e underflow: %d\n",rowmax,underflow);
     proj_rowmax = rowmax;
   }
   MPI_Barrier(MPI_COMM_WORLD);
@@ -1047,11 +1103,18 @@ void preproc(){
   time = MPI_Wtime();
   if(myid==0)printf("FILL BACKPROJECTION MATRIX\n");
   {
+    #ifndef MATRIX
     back_warpvalue = new MATPREC[back_warpnztot*WARPSIZE];
+    #endif
     #pragma omp parallel for
     for(int n = 0; n < back_warpnztot*WARPSIZE; n++)
+      #ifdef MATRIX
+      back_warpindval[n].val = 0.0;
+      #else
       back_warpvalue[n] = 0.0;
+      #endif
     double rowmax = 0.0;
+    int underflow = 0;
     #pragma omp parallel for
     for(int block = 0; block < back_numblocks; block++){
       for(int pix = block*back_blocksize; pix < (block+1)*back_blocksize && pix < mynumpix; pix++){
@@ -1067,13 +1130,24 @@ void preproc(){
           for(int row = back_warpdispl[warp]; row < back_warpdispl[warp+1]; row++){
             int ind = row*WARPSIZE+n%WARPSIZE;
             if(back_warpindextag[ind]){
+              #ifdef MATRIX
+              int mapind = back_mapdispl[buff]+back_warpindval[ind].ind;
+              #else
               int mapind = back_mapdispl[buff]+back_warpindex[ind];
+              #endif
               int rayind = back_buffmap[mapind];
               double rho = raycoorout[rayind].real();
               double theta = raycoorout[rayind].imag();
               double temp = 0;
               findlength(theta,rho,domain,&temp);
+              if((MATPREC)temp==0.0)
+                #pragma omp atomic
+                underflow++;
+              #ifdef MATRIX
+              back_warpindval[ind].val = temp;
+              #else
               back_warpvalue[ind] = temp;
+              #endif
               reduce += temp;
             }
           }
@@ -1082,7 +1156,7 @@ void preproc(){
       }
     }
     MPI_Allreduce(MPI_IN_PLACE,&rowmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-    if(myid==0)printf("rowmax: %e\n",rowmax);
+    if(myid==0)printf("rowmax: %e underflow: %d\n",rowmax,underflow);
     back_rowmax = rowmax;
   }
   delete[] raycoorout;

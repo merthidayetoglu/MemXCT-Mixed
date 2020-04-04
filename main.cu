@@ -33,7 +33,7 @@ int numbatch; //NUMBER OF BATCHES
 
 double xstart; //X START OF DOMAIN
 double ystart; //Y START OF DOMAIN
-double pixsize = 1.0; //PIXEL SIZE
+double pixsize; //PIXEL SIZE
 double rhostart; //RHO START
 double raylength; //RAYLENGTH
 
@@ -104,6 +104,8 @@ int main(int argc, char** argv){
   chartemp = getenv("BATCHSIZE");
   batchsize = atoi(chartemp);
 
+  chartemp = getenv("PIXSIZE");
+  pixsize = atof(chartemp);
   chartemp = getenv("XSTART");
   xstart = atof(chartemp);
   //chartemp = getenv("YSTART");
@@ -207,7 +209,7 @@ int main(int argc, char** argv){
     printf("  EFFECTIVE BUFFER SIZE : %d (%f KB) / %d (%f KB)\n",proj_buffsize*FFACTOR,proj_buffsize*(int)sizeof(VECPREC)/1024.0*FFACTOR,back_buffsize*FFACTOR,back_buffsize*sizeof(VECPREC)/1024.0*FFACTOR);
     printf("   BUFFER SIZE PER SLICE: %d (%f KB) / %d (%f KB)\n",proj_buffsize,proj_buffsize*(int)sizeof(VECPREC)/1024.0,back_buffsize,back_buffsize*sizeof(VECPREC)/1024.0);
     printf("\n");
-    printf("INTEGER: %d, DOUBLE: %d, LONG: %d, SHORT: %d, POINTER: %d\n",(int)sizeof(int),(int)sizeof(double),(int)sizeof(long),(int)sizeof(unsigned short),(int)sizeof(complex<double>*));
+    printf("INTEGER: %ld, DOUBLE: %ld, LONG: %ld, SHORT: %ld, MATRIX %ld, POINTER: %ld\n",sizeof(int),sizeof(double),sizeof(long),sizeof(unsigned short),sizeof(matrix),sizeof(float*));
     printf("\n");
     printf("X & Y START   : (%f %f)\n",xstart,ystart);
     printf("RHO START     : %f\n",rhostart);
@@ -220,6 +222,17 @@ int main(int argc, char** argv){
     printf("\n");
     printf("NUMBER OF PROCS PER SOCKET: %d PER NODE: %d\n",numproc_socket,numproc_node);
     printf("NUMBER OF NODES: %d SOCKETS: %d PROCS: %d\n",numnode,numsocket,numproc);
+    printf("\n");
+    #ifdef MIXED
+    printf("MIXED PRECISION ON\n");
+    #else
+    printf("MIXED PRECISION OFF\n");
+    #endif
+    #ifdef MATRIX
+    printf("MATRIX STRUCTURE ON\n");
+    #else
+    printf("MATRIX STRUCTURE OFF\n");
+    #endif
     printf("\n");
   }
 
@@ -251,6 +264,7 @@ int main(int argc, char** argv){
 
   setup_gpu(&obj_d,&gra_d,&dir_d,&mes_d,&res_d,&ray_d);
 
+  double scale;
   float *pixsendbuff = new float[mynumpix*batchsize];
   float *pixrecvbuff;
   float *objwritebuff;
@@ -292,8 +306,8 @@ int main(int argc, char** argv){
         extern double back_rowmax;
         double mesmax = max_kernel(mes_h,mynumray*batchsize);
         double maxpos = mesmax*back_rowmax*proj_rowmax;
-        double scale = 64.0e3/maxpos;
-        if(myid==0)printf("maxpos: %e scale: %e\n",maxpos,scale);
+        scale = 64.0e3/maxpos;
+        if(myid==0)printf("mesmax: %e maxpos: %e scale: %e\n",mesmax,maxpos,scale);
         scale_kernel(mes_d,scale,mynumray*batchsize);
         cudaMemcpy(mes_h,mes_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       }
@@ -352,11 +366,12 @@ int main(int argc, char** argv){
       extern int *numpixs;
       extern int *pixstart;
       extern int *objglobalind;
+      double unscale = 1.0/scale;
       MPI_Request sendrequest;
       MPI_Request recvrequest[numproc];
       #pragma omp parallel for
       for(int n = 0; n < mynumpix*batchsize; n++)
-        pixsendbuff[n] = obj_h[n];
+        pixsendbuff[n] = obj_h[n]*unscale;
       MPI_Issend(pixsendbuff,mynumpix*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,&sendrequest);
       if(myid == 0){
         for(int p = 0; p < numproc; p++)
@@ -397,9 +412,9 @@ int main(int argc, char** argv){
   if(myid==0){
     extern long proj_rownzall;
     extern long proj_warpnzall;
-    extern int proj_mapnzall;
+    extern long proj_mapnzall;
     extern long back_warpnzall;
-    extern int back_mapnzall;
+    extern long back_mapnzall;
     extern long raynumoutall;
     extern long socketrayoutall;
     extern long noderayoutall;
@@ -434,6 +449,7 @@ int main(int argc, char** argv){
 
     double projglobal = (((double)proj_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+proj_mapnzall*sizeof(int))+(double)FFACTOR*(proj_mapnzall*sizeof(VECPREC)+raynumoutall*(sizeof(COMMPREC)+sizeof(int))))/1.0e9*numproj;
     double backglobal = (((double)back_warpnzall*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))+back_mapnzall*sizeof(int))+(double)FFACTOR*(back_mapnzall*(sizeof(COMMPREC)+sizeof(int))+numpix*sizeof(VECPREC)))/1.0e9*numback;
+
     double global = projglobal+backglobal;
     double projglobalbw = projglobal/pktime*numproc;
     double backglobalbw = backglobal/bktime*numproc;

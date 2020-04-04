@@ -6,17 +6,31 @@
 #BSUB -alloc_flags "gpudefault smt4"
 #BUSB -env "all,LSF_CPU_ISOLATION=on"
 
-export NUMTHE=1501 #shale 1501 chip 1210 charcoal 4500
-export NUMRHO=2048 #shale 2048 chip 2448 charcoal 6613
+export NUMTHE=1501 #shale 1501 chip 1210 charcoal 4500 brain 4501
+export NUMRHO=2048 #shale 2048 chip 2448 charcoal 6613 brain 11283
 #DOMAIN SIZE
-export NUMSLICE=128 #shale 1792 chip 1024 charcoal 4198
-export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (1994)
+export NUMSLICE=32 #shale 1792 chip 1024 charcoal 4198 brain 9209
+export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
 export BATCHSIZE=16 #shale 256 chip 32
 #DOMAIN INFORMATION
-export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5
-export RHOSTART=-1024 #shale -1024 chip -1204 charcoal -3333
+export PIXSIZE=1 
+export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5 brain 5641.5
+export RHOSTART=-1024
+#charcoal     [0,997): -3316
+#          [997,1994): -3324
+#         [1994,2989): -3333
+#         [2989,rest): -3336
+#brain    [0, 2380): 5964
+#      [2380, 3195): 5961.5
+#      [3195, 4010): 5964
+#      [4010, 4825): 5966.5
+#      [4825, 5640): 5969
+#      [5640, 6455): 5961.5
+#      [6455, 7270): 5976.5
+#      [7270, 8085): 5961.5
+#      [8085, rest): 5961.5 
 #SOLVER DATA
-export NUMITER=27
+export NUMITER=30
 #TILE SIZE (MUST BE POWER OF TWO)
 export SPATSIZE=128
 export SPECSIZE=128
@@ -26,8 +40,8 @@ export BACKBLOCK=1024
 export PROJBUFF=96 #KB
 export BACKBUFF=96 #KB
 
-#export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.1s.spectral.data
-#export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.1s.theta.data
+#export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/flatcorr_2x_extracted.9209s.sino.spectral.data
+#export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/flatcorr_2x_extracted.9209s.sino.theta.data
 #export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.4198s.sino.spectral.data
 #export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.4198s.sino.theta.data
 export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.sino.spectral.data
@@ -44,6 +58,7 @@ export PROCPERSOCKET=3 #PROCS PER SOCKET
 #jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1 -bpacked:7 js_task_info nvprof --analysis-metrics -o /gpfs/alpine/scratch/merth/csc362/profile/analysis_%p.nvvp -f ./memxct
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
+#jsrun --smpiargs="-gpu" -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
