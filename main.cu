@@ -190,7 +190,7 @@ int main(int argc, char** argv){
     printf("    NUMBER OF PIXELS (X x Y): %d (%d x %d)\n",numx*numy,numx,numy);
     printf("         NUM. SLICES (B x S): %d (%d x %d)\n",numslice,numbatch,batchsize);
     printf("                 START SLICE: %d\n",startslice);
-    printf("                  BATCH SIZE: %d (%f + %f GB) %d FUSE FACTOR\n",batchsize,numr*numt*batchsize*sizeof(VECPREC)/1.0e9,numx*numy*batchsize*sizeof(VECPREC)/1.0e9,FFACTOR);
+    printf("                  BATCH SIZE: %d FUSE FACTOR %d\n",batchsize,FFACTOR);
     printf("\n");
     printf("     SPATIAL / SPECTRAL  TILE SIZE: %d (%d x %d) / %d (%d x %d)\n",spatsize*spatsize,spatsize,spatsize,specsize*specsize,specsize,specsize);
     printf("NUMBER OF SPATIAL / SPECTRAL TILES: %d (%d x %d) / %d (%d x %d)\n",numspattile,numxtile,numytile,numspectile,numttile,numrtile);
@@ -246,7 +246,6 @@ int main(int argc, char** argv){
   preproc();
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("PREPROCESSING TIME: %e\n",MPI_Wtime()-timep);
-  if(myid==0)printf("CG MEMORY: %f GB\n",3.0*sizeof(double)*(mynumpix+mynumray)*batchsize/1.0e9);
 
   double *obj_h;//OBJECT
   double *gra_h;//GRADIENT
@@ -270,7 +269,10 @@ int main(int argc, char** argv){
 
   setup_gpu(&obj_d,&gra_d,&dir_d,&mes_d,&res_d,&ray_d);
 
-  double scale;
+  double backscale = 1.0;
+  double projscale = 1.0;
+  extern double proj_rowmax;
+  extern double back_rowmax;
   float *pixsendbuff = new float[mynumpix*batchsize];
   float *pixrecvbuff;
   float *objwritebuff;
@@ -337,29 +339,19 @@ int main(int argc, char** argv){
       //READ COMPLETE
       cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
       cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
-      {
-        extern double proj_rowmax;
-        extern double back_rowmax;
-        double mesmax = max_kernel(mes_h,mynumray*batchsize);
-        double maxpos = mesmax*back_rowmax*proj_rowmax;
-        scale = 64.0e3/maxpos;
-        if(myid==0)printf("mesmax: %e maxpos: %e scale: %e\n",mesmax,maxpos,scale);
-        scale_kernel(mes_d,scale,mynumray*batchsize);
-        cudaMemcpy(mes_h,mes_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
-      }
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
     //FIND GRADIENT
-    backproject(gra_d,mes_d);
-    cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
     double resnorm = norm_kernel(mes_h,mynumray*batchsize);
     double resmax = max_kernel(mes_h,mynumray*batchsize);
+    backscale = 64.0e3/(resmax*back_rowmax);
+    backproject(gra_d,mes_d,backscale);
+    cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
     double gradnorm = norm_kernel(gra_h,mynumpix*batchsize);
-    double gradmax = max_kernel(gra_h,mynumpix*batchsize);
+    double dirmax = max_kernel(gra_h,mynumpix*batchsize);
     double objnorm = 0.0;
-    double objmax = 0.0;
-    if(myid==0)printf("iter: %d resnorm: %e resmax: %e gradnorm: %e gradmax: %e objnorm: %e objmax: %e\n",0,resnorm,resmax,gradnorm,gradmax,objnorm,objmax);
+    if(myid==0)printf("iter: %d resnorm: %e resmax: %e dirmax: %e objnorm: %e bscale %e\n",0,resnorm,resmax,dirmax,objnorm,backscale);
     //SAVE DIRECTION
     double oldgradnorm = gradnorm;
     copy_kernel(dir_d,gra_d,mynumpix*batchsize);
@@ -367,7 +359,8 @@ int main(int argc, char** argv){
     //START ITERATIONS
     for(int iter = 1; iter <= numiter; iter++){
       //PROJECT DIRECTION
-      project(ray_d,dir_d);
+      projscale = 64.0e3/(dirmax*proj_rowmax);
+      project(ray_d,dir_d,projscale);
       cudaMemcpy(ray_h,ray_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       cudaMemcpy(res_h,res_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       //FIND STEP SIZE
@@ -376,24 +369,25 @@ int main(int argc, char** argv){
       //STEP SIZE
       double alpha = temp1/temp2;
       saxpy_kernel(obj_d,obj_d,alpha,dir_d,mynumpix*batchsize);
+      cudaMemcpy(obj_h,obj_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
+      objnorm = norm_kernel(obj_h,mynumpix*batchsize);
       //FIND RESIDUAL ERROR
       saxpy_kernel(res_d,res_d,-alpha,ray_d,mynumray*batchsize);
-      //FIND GRADIENT
-      backproject(gra_d,res_d);
       cudaMemcpy(res_h,res_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
-      cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
-      cudaMemcpy(obj_h,obj_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
       resnorm = norm_kernel(res_h,mynumray*batchsize);
       resmax = max_kernel(res_h,mynumray*batchsize);
+      //FIND GRADIENT
+      backscale = 64.0e3/(resmax*back_rowmax);
+      backproject(gra_d,res_d,backscale);
+      cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
       gradnorm = norm_kernel(gra_h,mynumpix*batchsize);
-      gradmax = max_kernel(gra_h,mynumpix*batchsize);
-      objnorm = norm_kernel(obj_h,mynumpix*batchsize);
-      objmax = max_kernel(obj_h,mynumpix*batchsize);
+      if(myid==0)printf("iter: %d resnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e pscale %e\n",iter,resnorm,resmax,dirmax,objnorm,backscale,projscale);
       //UPDATE DIRECTION
       double beta = gradnorm/oldgradnorm;
       oldgradnorm = gradnorm;
       saxpy_kernel(dir_d,gra_d,beta,dir_d,mynumpix*batchsize);
-      if(myid==0)printf("iter: %d resnorm: %e resmax: %e gradnorm: %e gradmax: %e objnorm: %e objmax: %e alpha: %e beta: %e\n",iter,resnorm,resmax,gradnorm,gradmax,objnorm,objmax,alpha,beta);
+      cudaMemcpy(dir_h,dir_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
+      dirmax = max_kernel(dir_h,mynumpix*batchsize);
     }
     //WRITE OUTPUT BATCH
     MPI_Barrier(MPI_COMM_WORLD);
@@ -402,12 +396,11 @@ int main(int argc, char** argv){
       extern int *numpixs;
       extern int *pixstart;
       extern long *objglobalind;
-      double unscale = 1.0/scale;
       MPI_Request recvrequest[numproc];
       MPI_Request sendrequest;
       #pragma omp parallel for
       for(int n = 0; n < mynumpix*batchsize; n++)
-        pixsendbuff[n] = obj_h[n]*unscale;
+        pixsendbuff[n] = obj_h[n];
       MPI_Issend(pixsendbuff,mynumpix*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,&sendrequest);
       if(myid == 0){
         for(int p = 0; p < numproc; p++)

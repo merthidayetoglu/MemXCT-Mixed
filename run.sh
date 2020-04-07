@@ -12,11 +12,11 @@
 export NUMTHE=1501 #shale 1501 chip 1210 charcoal 4500 brain 4501
 export NUMRHO=2048 #shale 2048 chip 2448 charcoal 6613 brain 11283
 #DOMAIN SIZE
-export NUMSLICE=4 #shale 1792 chip 1024 charcoal 4198 brain 9209
+export NUMSLICE=256 #shale 1792 chip 1024 charcoal 4198 brain 9209
 export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
-export BATCHSIZE=4 #shale 256 chip 32
+export BATCHSIZE=256 #shale 256 chip 32
 #DOMAIN INFORMATION
-export PIXSIZE=1
+export PIXSIZE=10
 export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5 brain 5641.5
 export RHOSTART=-1024
 #charcoal     [0,997): -3316
@@ -35,8 +35,8 @@ export RHOSTART=-1024
 #SOLVER DATA
 export NUMITER=30
 #TILE SIZE (MUST BE POWER OF TWO)
-export SPATSIZE=64
-export SPECSIZE=64
+export SPATSIZE=128
+export SPECSIZE=128
 #BLOCK & BUFFER SIZE
 export PROJBLOCK=1024
 export BACKBLOCK=1024
@@ -62,7 +62,7 @@ export PROCPERSOCKET=3 #PROCS PER SOCKET
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
 #jsrun --smpiargs="-gpu" -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 
@@ -88,7 +88,7 @@ jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memx
 export PROCPERNODE=6 #PROCS PER NODE
 export PROCPERSOCKET=3 #PROCS PER SOCKET
 sleep 1
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 cp var_double_ffactor16_overlapped vars.h
 make clean
 make -j

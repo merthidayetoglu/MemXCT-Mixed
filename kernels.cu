@@ -181,11 +181,11 @@ __global__ void kernel_project __launch_bounds__(1024,1) (VECPREC*,VECPREC*,matr
 __global__ void kernel_project __launch_bounds__(1024,1) (VECPREC*,VECPREC*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int);
 #endif
 __global__ void kernel_reduce(COMMPREC*,COMMPREC*,int*,int*,int,int,int*,int*);
-__global__ void kernel_reducenopack(double*,COMMPREC*,int*,int*,int,int,int*);
-__global__ void kernel_scatternopack(double*,COMMPREC*,int*,int*,int,int,int*);
+__global__ void kernel_reducenopack(double*,COMMPREC*,int*,int*,int,int,int*,double);
+__global__ void kernel_scatternopack(double*,COMMPREC*,int*,int*,int,int,int*,double);
 __global__ void kernel_scatter(COMMPREC*,COMMPREC*,int*,int*,int,int,int*,int*);
-__global__ void kernel_double2VECPREC(VECPREC*,double*,int);
-__global__ void kernel_VECPREC2double(double*,VECPREC*,int);
+__global__ void kernel_double2VECPREC(VECPREC*,double*,int,double);
+__global__ void kernel_VECPREC2double(double*,VECPREC*,int,double);
 __global__ void kernel_VECPREC2COMMPREC(COMMPREC*,VECPREC*,int,int*);
 __global__ void kernel_COMMPREC2VECPREC(VECPREC*,COMMPREC*,int,int*);
 
@@ -381,15 +381,24 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   MPI_Allgather(&batchmem,1,MPI_DOUBLE,batchmems,1,MPI_DOUBLE,MPI_COMM_WORLD);
   MPI_Allgather(&commem,1,MPI_DOUBLE,commems,1,MPI_DOUBLE,MPI_COMM_WORLD);
   if(myid==0){
+    double gpumaxmem = 0.0;
+    double batchmaxmem = 0.0;
+    double commaxmem = 0.0;
+    double totmaxmem = 0.0;
     double gputotmem = 0.0;
     double batchtotmem = 0.0;
     double commtotmem = 0.0;
     for(int p = 0; p < numproc; p++){
       printf("PROC %d GPU MEMORY: %f GB + %f GB + %f GB = %f GB\n",p,gpumems[p],batchmems[p],commems[p],gpumems[p]+batchmems[p]+commems[p]);
+      if(gpumems[p]>gpumaxmem)gpumaxmem=gpumems[p];
+      if(batchmems[p]>batchmaxmem)batchmaxmem=batchmems[p];
+      if(commems[p]>commaxmem)commaxmem=commems[p];
+      if(gpumems[p]+batchmems[p]+commems[p]>totmaxmem)totmaxmem=gpumems[p]+batchmems[p]+commems[p];
       gputotmem += gpumems[p];
       batchtotmem += batchmems[p];
       commtotmem += commems[p];
     }
+    printf("MAX GPU MEMORY gpumem %f GB batchmem %f GB commem %f GB total %f GB\n",gpumaxmem,batchmaxmem,commaxmem,totmaxmem);
     printf("TOTAL GPU MEMORY gpumem %f GB + batchmem %f GB + commem %f GB = %f GB\n",gputotmem,batchtotmem,commtotmem,gputotmem+batchtotmem+commtotmem);
   }
 
@@ -408,12 +417,12 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   communications();
 }
 
-void project(double *sino_d, double *tomo_d){
+void project(double *sino_d, double *tomo_d, double scale){
   cudaDeviceSynchronize();
   MPI_Barrier(MPI_COMM_WORLD);
   double projecttime = MPI_Wtime();
   //PARTIAL PROJECTION
-  kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d,mynumpix*FFACTOR);
+  kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d,mynumpix*FFACTOR,scale);
   partial_project();
   for(int slice = 0; slice < batchsize; slice += FFACTOR){
     //MEMCPY DEVICE TO HOST
@@ -439,7 +448,7 @@ void project(double *sino_d, double *tomo_d){
       #ifdef OVERLAP
       //PARTIAL PROJECTION
       if(slice+FFACTOR < batchsize){
-        kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d+(slice+FFACTOR)*mynumpix,mynumpix*FFACTOR);
+        kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d+(slice+FFACTOR)*mynumpix,mynumpix*FFACTOR,scale);
         partial_project();
       }
       #endif
@@ -457,7 +466,7 @@ void project(double *sino_d, double *tomo_d){
     pmtime += milliseconds/1e3;
     //HOST REDUCTION
     cudaEventRecord(start);
-    kernel_reducenopack<<<(mynumray+255)/256,256>>>(sino_d+slice*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d);
+    kernel_reducenopack<<<(mynumray+255)/256,256>>>(sino_d+slice*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d,1.0/scale);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -467,7 +476,7 @@ void project(double *sino_d, double *tomo_d){
     #ifndef OVERLAP
     //PARTIAL PROJECTION
     if(slice+FFACTOR < batchsize){
-      kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d+(slice+FFACTOR)*mynumpix,mynumpix*FFACTOR);
+      kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d+(slice+FFACTOR)*mynumpix,mynumpix*FFACTOR,scale);
       partial_project();
     }
     #endif
@@ -478,13 +487,13 @@ void project(double *sino_d, double *tomo_d){
 }
 
 
-void backproject(double *tomo_d, double *sino_d){
+void backproject(double *tomo_d, double *sino_d, double scale){
   cudaDeviceSynchronize();
   MPI_Barrier(MPI_COMM_WORLD);
   double backprojecttime = MPI_Wtime();
   //HOST SCATTER
   cudaEventRecord(start);
-  kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d);
+  kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d,scale);
   cudaEventRecord(stop);
   cudaEventSynchronize(stop);
   cudaEventElapsedTime(&milliseconds,start,stop);
@@ -527,7 +536,7 @@ void backproject(double *tomo_d, double *sino_d){
     if(slice+FFACTOR < batchsize){
       //HOST SCATTER
       cudaEventRecord(start);
-      kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d+(slice+FFACTOR)*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d);
+      kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d+(slice+FFACTOR)*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d,scale);
       cudaEventRecord(stop);
       cudaEventSynchronize(stop);
       cudaEventElapsedTime(&milliseconds,start,stop);
@@ -554,7 +563,7 @@ void backproject(double *tomo_d, double *sino_d){
     #ifdef OVERLAP
     //PARTIAL BACKPROJECTION
     partial_backproject();
-    kernel_VECPREC2double<<<(mynumpix*FFACTOR+255)/256,256>>>(tomo_d+slice*mynumpix,tomobuff_d,mynumpix*FFACTOR);
+    kernel_VECPREC2double<<<(mynumpix*FFACTOR+255)/256,256>>>(tomo_d+slice*mynumpix,tomobuff_d,mynumpix*FFACTOR,1.0/scale);
     #endif
     if(slice+FFACTOR < batchsize){
       MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
@@ -565,7 +574,7 @@ void backproject(double *tomo_d, double *sino_d){
     #ifndef OVERLAP
     //PARTIAL BACKPROJECTION
     partial_backproject();
-    kernel_VECPREC2double<<<(mynumpix*FFACTOR+255)/256,256>>>(tomo_d+slice*mynumpix,tomobuff_d,mynumpix*FFACTOR);
+    kernel_VECPREC2double<<<(mynumpix*FFACTOR+255)/256,256>>>(tomo_d+slice*mynumpix,tomobuff_d,mynumpix*FFACTOR,1.0/scale);
     #endif
     numback++;
     if(slice+FFACTOR < batchsize){
@@ -753,7 +762,7 @@ __global__ void kernel_reduce(COMMPREC *y, COMMPREC *x, int *displ, int *index, 
       y[packmap[f*numrow+row]] = reduce[f];
   }
 }
-__global__ void kernel_reducenopack(double *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *unpackmap){
+__global__ void kernel_reducenopack(double *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *unpackmap, double scale){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
   #ifdef MIXED
   float reduce[FFACTOR] = {0.0};
@@ -771,15 +780,15 @@ __global__ void kernel_reducenopack(double *y, COMMPREC *x, int *displ, int *ind
         #endif
     }
     for(int f = 0; f < FFACTOR; f++)
-      y[f*numrow+row] = reduce[f];
+      y[f*numrow+row] = (double)reduce[f]*scale;
   }
 }
-__global__ void kernel_scatternopack(double *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *unpackmap){
+__global__ void kernel_scatternopack(double *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *unpackmap, double scale){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
   VECPREC scatter[FFACTOR] = {0.0};
   if(row < numrow){
     for(int f = 0; f < FFACTOR; f++)
-      scatter[f] = y[f*numrow+row];
+      scatter[f] = y[f*numrow+row]*scale;
     for(int n = displ[row]; n < displ[row+1]; n++){
       int ind = index[n];
       for(int f = 0; f < FFACTOR; f++)
@@ -800,15 +809,15 @@ __global__ void kernel_scatter(COMMPREC *y, COMMPREC *x, int *displ, int *index,
     }
   }
 }
-__global__ void kernel_double2VECPREC(VECPREC *y, double *x,int dim){
+__global__ void kernel_double2VECPREC(VECPREC *y, double *x,int dim, double scale){
   int tid = blockIdx.x*blockDim.x+threadIdx.x;
   if(tid < dim)
-    y[tid] = x[tid];
+    y[tid] = x[tid]*scale;
 };
-__global__ void kernel_VECPREC2double(double *y, VECPREC *x,int dim){
+__global__ void kernel_VECPREC2double(double *y, VECPREC *x,int dim, double scale){
   int tid = blockIdx.x*blockDim.x+threadIdx.x;
   if(tid < dim)
-    y[tid] = x[tid];
+    y[tid] = (double)x[tid]*scale;
 };
 __global__ void kernel_VECPREC2COMMPREC(COMMPREC *y, VECPREC *x,int dim, int *packmap){
   int tid = blockIdx.x*blockDim.x+threadIdx.x;
