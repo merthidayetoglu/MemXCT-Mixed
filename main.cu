@@ -351,7 +351,7 @@ int main(int argc, char** argv){
     double gradnorm = norm_kernel(gra_h,mynumpix*batchsize);
     double dirmax = max_kernel(gra_h,mynumpix*batchsize);
     double objnorm = 0.0;
-    if(myid==0)printf("iter: %d resnorm: %e resmax: %e dirmax: %e objnorm: %e bscale %e\n",0,resnorm,resmax,dirmax,objnorm,backscale);
+    if(myid==0)printf("iter: %d resnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e\n",0,resnorm,resmax,dirmax,objnorm,backscale);
     //SAVE DIRECTION
     double oldgradnorm = gradnorm;
     copy_kernel(dir_d,gra_d,mynumpix*batchsize);

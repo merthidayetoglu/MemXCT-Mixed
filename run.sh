@@ -16,7 +16,7 @@ export NUMSLICE=256 #shale 1792 chip 1024 charcoal 4198 brain 9209
 export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
 export BATCHSIZE=256 #shale 256 chip 32
 #DOMAIN INFORMATION
-export PIXSIZE=10
+export PIXSIZE=1
 export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5 brain 5641.5
 export RHOSTART=-1024
 #charcoal     [0,997): -3316
