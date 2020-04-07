@@ -233,6 +233,11 @@ int main(int argc, char** argv){
     #else
     printf("MATRIX STRUCTURE OFF\n");
     #endif
+    #ifdef OVERLAP
+    printf("COMMUNICATIONS OVERLAPPED\n");
+    #else
+    printf("COMMUNICATIONS NOT OVERLAPPED\n");
+    #endif
     printf("\n");
   }
 
@@ -241,6 +246,7 @@ int main(int argc, char** argv){
   preproc();
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("PREPROCESSING TIME: %e\n",MPI_Wtime()-timep);
+  if(myid==0)printf("CG MEMORY: %f GB\n",3.0*sizeof(double)*(mynumpix+mynumray)*batchsize/1.0e9);
 
   double *obj_h;//OBJECT
   double *gra_h;//GRADIENT
@@ -269,10 +275,21 @@ int main(int argc, char** argv){
   float *pixrecvbuff;
   float *objwritebuff;
   if(myid == 0){
-    pixrecvbuff = new float[numpix*batchsize];
-    objwritebuff = new float[numx*numy*batchsize];
+    pixrecvbuff = new float[(long)numpix*batchsize];
+    objwritebuff = new float[(long)numx*numy*batchsize];
+    printf("\n");
+    printf("PIXRECVBUFF: %ld (%f GB)\n",(long)numpix*batchsize,sizeof(float)*numpix*batchsize/1.0e9);
+    printf("OBJWRITEBUFF: %ld (%f GB)\n",(long)numx*numy*batchsize,sizeof(float)*numx*numy*batchsize/1.0e9);
   }
-  float *mesdata = new float[numt*numr*batchsize];
+  float *raysendbuff;
+  float *rayrecvbuff = new float[mynumray*batchsize];
+  float *mesreadbuff;
+  if(myid == 0){
+    raysendbuff = new float[(long)numray*batchsize];
+    mesreadbuff = new float[(long)numt*numr*batchsize];
+    printf("RAYSENDBUFF: %ld (%f GB)\n",(long)numray*batchsize,sizeof(float)*numray*batchsize/1.0e9);
+    printf("MESREADBUFF: %ld (%f GB)\n",(long)numt*numr*batchsize,sizeof(float)*numt*numr*batchsize/1.0e9);
+  }
   if(myid==0)printf("INPUT FILE: %s\n",sinfile);
   if(myid==0)printf("OUTPUT FILE: %s\n",outfile);
   FILE *inputf;
@@ -280,7 +297,7 @@ int main(int argc, char** argv){
   if(myid==0)inputf = fopen(sinfile,"rb");
   if(myid==0)fseek(inputf,sizeof(float)*startslice*numr*numt,SEEK_SET);
   if(myid==0)outputf = fopen(outfile,"wb");
-  if(myid==0)printf("CONJUGATE-GRADIENT OPTIMIZATION\n");
+  if(myid==0)printf("\nCONJUGATE-GRADIENT OPTIMIZATION\n");
   MPI_Barrier(MPI_COMM_WORLD);
   double time = 0;
   rtime = MPI_Wtime();
@@ -290,15 +307,34 @@ int main(int argc, char** argv){
     MPI_Barrier(MPI_COMM_WORLD);
     time = MPI_Wtime();
     {
-      extern int *raymesind;
-      if(myid==0)fread(mesdata,sizeof(float),numr*numt*batchsize,inputf);
-      for(int slice = 0; slice < batchsize; slice++){
-        MPI_Bcast(mesdata+slice*numr*numt,numr*numt,MPI_FLOAT,0,MPI_COMM_WORLD);
+      //READ START
+      extern int *numrays;
+      extern int *raystart;
+      extern long *mesglobalind;
+      MPI_Request sendrequest[numproc];
+      MPI_Request recvrequest;
+      if(myid==0){
+        double readtime = MPI_Wtime();
+        fread(mesreadbuff,sizeof(float),(long)numr*numt*batchsize,inputf);
+        readtime = MPI_Wtime()-readtime;
+        printf("READ TIME %e s (%f GB/s)\n",readtime,sizeof(float)*numr*numt*batchsize/readtime/1.0e9);
         #pragma omp parallel for
-        for(int k = 0; k < mynumray; k++)
-          if(raymesind[k]>-1)mes_h[slice*mynumray+k] = mesdata[slice*numr*numt+raymesind[k]];
-          else mes_h[slice*mynumray+k] = 0;
+        for(long n = 0; n < (long)numray*batchsize; n++){
+          long ind = mesglobalind[n];
+          if(ind > -1)
+            raysendbuff[n] = mesreadbuff[ind];
+          else
+            raysendbuff[n] = 0;
+        }
+        for(int p = 0; p < numproc; p++)
+          MPI_Issend(raysendbuff+(long)raystart[p]*batchsize,numrays[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,sendrequest+p);
       }
+      MPI_Irecv(rayrecvbuff,mynumray*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,&recvrequest);
+      MPI_Wait(&recvrequest,MPI_STATUS_IGNORE);
+      #pragma omp parallel for
+      for(int n = 0; n < mynumray*batchsize; n++)
+        mes_h[n] = rayrecvbuff[n];
+      //READ COMPLETE
       cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
       cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
       {
@@ -331,7 +367,7 @@ int main(int argc, char** argv){
     //START ITERATIONS
     for(int iter = 1; iter <= numiter; iter++){
       //PROJECT DIRECTION
-      projection(ray_d,dir_d);
+      project(ray_d,dir_d);
       cudaMemcpy(ray_h,ray_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       cudaMemcpy(res_h,res_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       //FIND STEP SIZE
@@ -353,11 +389,11 @@ int main(int argc, char** argv){
       gradmax = max_kernel(gra_h,mynumpix*batchsize);
       objnorm = norm_kernel(obj_h,mynumpix*batchsize);
       objmax = max_kernel(obj_h,mynumpix*batchsize);
-      if(myid==0)printf("iter: %d resnorm: %e resmax: %e gradnorm: %e gradmax: %e objnorm: %e objmax: %e\n",iter,resnorm,resmax,gradnorm,gradmax,objnorm,objmax);
       //UPDATE DIRECTION
       double beta = gradnorm/oldgradnorm;
       oldgradnorm = gradnorm;
       saxpy_kernel(dir_d,gra_d,beta,dir_d,mynumpix*batchsize);
+      if(myid==0)printf("iter: %d resnorm: %e resmax: %e gradnorm: %e gradmax: %e objnorm: %e objmax: %e alpha: %e beta: %e\n",iter,resnorm,resmax,gradnorm,gradmax,objnorm,objmax,alpha,beta);
     }
     //WRITE OUTPUT BATCH
     MPI_Barrier(MPI_COMM_WORLD);
@@ -365,22 +401,25 @@ int main(int argc, char** argv){
     {
       extern int *numpixs;
       extern int *pixstart;
-      extern int *objglobalind;
+      extern long *objglobalind;
       double unscale = 1.0/scale;
-      MPI_Request sendrequest;
       MPI_Request recvrequest[numproc];
+      MPI_Request sendrequest;
       #pragma omp parallel for
       for(int n = 0; n < mynumpix*batchsize; n++)
         pixsendbuff[n] = obj_h[n]*unscale;
       MPI_Issend(pixsendbuff,mynumpix*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,&sendrequest);
       if(myid == 0){
         for(int p = 0; p < numproc; p++)
-          MPI_Irecv(pixrecvbuff+pixstart[p]*batchsize,numpixs[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,recvrequest+p);
+          MPI_Irecv(pixrecvbuff+(long)pixstart[p]*batchsize,numpixs[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,recvrequest+p);
         MPI_Waitall(numproc,recvrequest,MPI_STATUSES_IGNORE);
         #pragma omp parallel for
-        for(int n = 0; n < numx*numy*batchsize; n++)
+        for(long n = 0; n < (long)numx*numy*batchsize; n++)
           objwritebuff[n] = pixrecvbuff[objglobalind[n]];
-        fwrite(objwritebuff,sizeof(float),numx*numy*batchsize,outputf);
+        double writetime = MPI_Wtime();
+        fwrite(objwritebuff,sizeof(float),(long)numx*numy*batchsize,outputf);
+        writetime = MPI_Wtime()-writetime;
+        printf("WRITE TIME %e s (%f GB/s)\n",writetime,sizeof(float)*numx*numy*batchsize/writetime/1.0e9);
       }
     }
     MPI_Barrier(MPI_COMM_WORLD);

@@ -6,13 +6,14 @@
 #include <omp.h>
 #include "mma.h"
 
-#define FFACTOR 16 //FUSING FACTOR
+#define OVERLAP //OVERLAP COMMUNICATIONS ON
+#define FFACTOR 4 //FUSING FACTOR
 #define WARPSIZE 32 //WARPSIZE
 #define MATPREC half //MATRIX PRECISION
 #define VECPREC half //VECTOR PRECISION
 #define COMMPREC half //COMMUNICATION PRECISION
-#define MATRIX
-#define MIXED
+#define MATRIX //MATRIX STRUCTURE ON
+#define MIXED //MIXED PRECISION ON
 
 struct matrix{
   unsigned short ind;
@@ -29,7 +30,7 @@ void findnumpix(double,double,double*,int*);
 void findpixind(double,double,double*,int*,int,int*);
 void findlength(double,double,double*,double*);
 
-void projection(double*,double*);
+void project(double*,double*);
 void backproject(double*,double*);
 
 int encode(unsigned short, unsigned short);
