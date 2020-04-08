@@ -338,8 +338,14 @@ int main(int argc, char** argv){
   sprintf(outfilebatch,"%s_%d",outfile,myid_batch);
   if(myid_data==0){
     inputf = fopen(sinfile,"rb");
-    fseek(inputf,sizeof(float)*mystartslice*numr*numt,SEEK_SET);
     outputf = fopen(outfilebatch,"wb");
+    fseek(inputf,sizeof(float)*mystartslice*numr*numt,SEEK_SET);
+    //DUMMY READ
+    int batchslice = batchsize;
+    if(batchsize > myslice)
+      batchslice = myslice%batchsize;
+    fread(mesreadbuff,sizeof(float),(long)numr*numt*batchsize,inputf);
+    fseek(inputf,sizeof(float)*mystartslice*numr*numt,SEEK_SET);
   }
   if(myid==0)printf("\nCONJUGATE-GRADIENT OPTIMIZATION\n");
   MPI_Barrier(MPI_COMM_WORLD);
@@ -466,7 +472,7 @@ int main(int argc, char** argv){
     double cgtime = rtime-ptime-btime-iotime;
     double othertime = recontime-rtime;
     printf("\n");
-    printf("recontime: %e recon: %e proj %e back %e cg %e i/o %e other %e\n",recontime/numproc,rtime/numproc,ptime/numproc,btime/numproc,cgtime/numproc,iotime/numproc,othertime/numproc);
+    printf("recon: %e proj %e back %e cg %e i/o %e other %e\n",recontime/numproc,ptime/numproc,btime/numproc,cgtime/numproc,iotime/numproc,othertime/numproc);
   }
   MPI_Allreduce(MPI_IN_PLACE,&numproj,1,MPI_INT,MPI_SUM,MPI_COMM_BATCH);
   MPI_Allreduce(MPI_IN_PLACE,&numback,1,MPI_INT,MPI_SUM,MPI_COMM_BATCH);
@@ -476,12 +482,14 @@ int main(int argc, char** argv){
   MPI_Allreduce(MPI_IN_PLACE,&pcrtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&pchtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&pmtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&prtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bktime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bcstime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bcntime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bcrtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bchtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bmtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&brtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   if(myid==0){
     printf("\nNUMBER OF TOTAL PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
     extern long proj_rownzall;

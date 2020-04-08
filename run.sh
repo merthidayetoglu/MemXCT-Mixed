@@ -2,19 +2,21 @@
 
 #BSUB -P CSC362
 #BSUB -W 00:45
-#BSUB -nnodes 16
+#BSUB -nnodes 128
 #BSUB -alloc_flags "gpudefault"
 #BUSB -env "all,LSF_CPU_ISOLATION=on"
-#BSUB -J strong16_shale
-#BSUB -o strong16_shale.%J
-#BSUB -e strong16_shale.%J
+#BSUB -J strong128_shale
+#BSUB -o strong128_shale.%J
+#BSUB -e strong128_shale.%J
+
+date
 
 export NUMTHE=1501 #shale 1501 chip 1210 charcoal 4500 brain 4501
 export NUMRHO=2048 #shale 2048 chip 2448 charcoal 6613 brain 11283
 #DOMAIN SIZE
 export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
-export NUMSLICE=128 #shale 1792 chip 1024 charcoal 4198 brain 9209
-export BATCHSIZE=128 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
+export NUMSLICE=256 #shale 1792 chip 1024 charcoal 4198 brain 9209
+export BATCHSIZE=16 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
 export BATCHPROC=1
 #DOMAIN INFORMATION
 export PIXSIZE=1
@@ -63,11 +65,17 @@ export PROCPERSOCKET=3 #PROCS PER SOCKET
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
 #jsrun --smpiargs="-gpu" -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+#jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info cuda-memcheck ./memxct
 
-exit 1
+#exit 1
 
-
+module load cuda
+cp var_mixed_ffactor16 vars.h
+make clean
+make -j
+sleep 1
+export SPATSIZE=256
+export SPECSIZE=256
 export BATCHPROC=1
 jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 export BATCHPROC=2
@@ -77,33 +85,51 @@ jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 export BATCHPROC=8
 jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 export BATCHPROC=16
-jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-
-export BATCHPROC=1
-jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n16 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_mixed_ffactor8 vars.h
+make clean
+make -j
+sleep 1
+export BATCHPROC=32
+jsrun -n32 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_mixed_ffactor4 vars.h
+make clean
+make -j
+sleep 1
+export BATCHPROC=64
+jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_mixed_ffactor2 vars.h
+make clean
+make -j
+sleep 1
+export BATCHPROC=128
+jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 cp var_mixed_ffactor16 vars.h
-export BATCHPROC=1
-jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-export BATCHPROC=2
-jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-export BATCHPROC=4
-jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-export BATCHPROC=8
-jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+make clean
+make -j
+sleep 1
 export BATCHPROC=16
-jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export SPATSIZE=128
+export SPECSIZE=128
+jsrun -n32 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export SPATSIZE=64
+export SPECSIZE=64
+jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 export BATCHPROC=1
+export SPATSIZE=256
+export SPECSIZE=256
 jsrun -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export SPATSIZE=128
+export SPECSIZE=128
 jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export SPATSIZE=64
+export SPECSIZE=64
 jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n16 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 
