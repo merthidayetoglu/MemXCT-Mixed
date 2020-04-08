@@ -293,11 +293,10 @@ int main(int argc, char** argv){
   rtime = MPI_Wtime();
   for(int batch = 0; batch < numbatch; batch++){
     if(myid==0)printf("BATCH %d\n",batch);
-    //READ BATCH
+    //READ INPUT BATCH
     MPI_Barrier(MPI_COMM_WORLD);
     time = MPI_Wtime();
     {
-      //READ START
       extern int *numrays;
       extern int *raystart;
       extern long *mesglobalind;
@@ -329,7 +328,7 @@ int main(int argc, char** argv){
     //FIND GRADIENT
     double resnorm = dot_kernel(res_d,res_d,mynumray*batchsize);
     double mesnorm = resnorm;
-    double resmax = max_kernel(res_h,mynumray*batchsize);
+    double resmax = max_kernel(res_d,mynumray*batchsize);
     backscale = 64.0e3/(resmax*back_rowmax);
     backproject(gra_d,res_d,backscale);
     double gradnorm = dot_kernel(gra_d,gra_d,mynumpix*batchsize);
