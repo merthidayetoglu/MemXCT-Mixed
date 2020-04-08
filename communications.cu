@@ -80,6 +80,13 @@ int *noderecvbuffdispl_p;
 COMMPREC **noderecvbuff_p;
 int *noderecvdevice_p;
 
+long proj_intersocket = 0;
+long proj_internode = 0;
+long proj_interhost = 0;
+long back_intersocket = 0;
+long back_internode = 0;
+long back_interhost = 0;
+
 void communications(){
 
   MPI_Request sendrequest[numproc];
@@ -116,51 +123,35 @@ void communications(){
   //SOCKET IPC WARM-UP
   {
     {
+      cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_SOCKET);
       double time = MPI_Wtime();
       for(int psend = 0; psend < numproc_socket; psend++){
-        if(socketsendcomm[psend])
+        if(socketsendcomm[psend]){
           cudaMemcpyPeerAsync(socketrecvbuff_p[psend]+socketrecvbuffdispl_p[psend]*FFACTOR,socketrecvdevice_p[psend],socketreducesendbuff_d+socketsendcommdispl[psend]*FFACTOR,mydevice,sizeof(COMMPREC)*socketsendcomm[psend]*FFACTOR);
+          if(psend != myid_socket)
+            proj_intersocket += socketsendcomm[psend];
+        }
       }
       cudaDeviceSynchronize();
-      /*int recvcount = 0;
-      for(int p = 0; p < numproc_socket; p++)
-        if(socketsendcomm[p])
-          if(p==myid)
-            cudaMemcpy(socketreducerecvbuff_d+socketrecvcommdispl[p]*FFACTOR,socketreducesendbuff_d+socketsendcommdispl[p]*FFACTOR,socketsendcomm[p]*FFACTOR*sizeof(COMMPREC),cudaMemcpyDeviceToDevice);
-          else
-            MPI_Issend(socketreducesendbuff_d+socketsendcommdispl[p]*FFACTOR,socketsendcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_SOCKET,sendrequest+p);
-      for(int p = 0; p < numproc_socket; p++)
-        if(socketrecvcomm[p] && p!=myid){
-          MPI_Irecv(socketreducerecvbuff_d+socketrecvcommdispl[p]*FFACTOR,socketrecvcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_SOCKET,recvrequest+recvcount);
-          recvcount++;
-        }
-      MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);*/
       MPI_Barrier(MPI_COMM_SOCKET);
-      if(myid==0)printf("socket warmup time %e\n",MPI_Wtime()-time);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_intersocket,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      if(myid==0)printf("proj socket warmup time %e\n",MPI_Wtime()-time);
     }
     {
+      cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_SOCKET);
       double time = MPI_Wtime();
       for(int psend = 0; psend < numproc_socket; psend++)
-        if(socketsendcomm[psend])
+        if(socketsendcomm[psend]){
           cudaMemcpyPeerAsync(socketreducesendbuff_d+socketsendcommdispl[psend]*FFACTOR,mydevice,socketrecvbuff_p[psend]+socketrecvbuffdispl_p[psend]*FFACTOR,socketrecvdevice_p[psend],sizeof(COMMPREC)*socketsendcomm[psend]*FFACTOR);
-      cudaDeviceSynchronize();
-      /*int sendcount = 0;
-      for(int p = 0; p < numproc_socket; p++)
-        if(socketsendcomm[p] && p!=myid){
-          MPI_Irecv(socketreducesendbuff_d+socketsendcommdispl[p]*FFACTOR,socketsendcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_SOCKET,sendrequest+sendcount);
-          sendcount++;
+          if(psend != myid_socket)
+            back_intersocket += socketsendcomm[psend];
         }
-      for(int p = 0; p < numproc_socket; p++)
-        if(socketrecvcomm[p])
-          if(p==myid)
-            cudaMemcpy(socketreducesendbuff_d+socketsendcommdispl[p]*FFACTOR,socketreducerecvbuff_d+socketrecvcommdispl[p]*FFACTOR,socketrecvcomm[p]*FFACTOR*sizeof(COMMPREC),cudaMemcpyDeviceToDevice);
-          else
-            MPI_Issend(socketreducerecvbuff_d+socketrecvcommdispl[p]*FFACTOR,socketrecvcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_SOCKET,recvrequest+p);
-      MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);*/
+      cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_SOCKET);
-      if(myid==0)printf("socket warmup time %e\n",MPI_Wtime()-time);
+      MPI_Allreduce(MPI_IN_PLACE,&back_intersocket,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      if(myid==0)printf("back socket warmup time %e\n",MPI_Wtime()-time);
     }
   }
   noderecvbuff_p = new COMMPREC*[numproc_node];
@@ -194,51 +185,35 @@ void communications(){
   //NODE IPC WARM-UP
   {
     {
+      cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_NODE);
       double time = MPI_Wtime();
       for(int psend = 0; psend < numproc_node; psend++){
-        if(nodesendcomm[psend])
+        if(nodesendcomm[psend]){
           cudaMemcpyPeerAsync(noderecvbuff_p[psend]+noderecvbuffdispl_p[psend]*FFACTOR,noderecvdevice_p[psend],nodereducesendbuff_d+nodesendcommdispl[psend]*FFACTOR,mydevice,sizeof(COMMPREC)*nodesendcomm[psend]*FFACTOR);
+          if(psend/numproc_socket != myid_node/numproc_socket)
+            proj_internode += nodesendcomm[psend];
+        }
       }
       cudaDeviceSynchronize();
-      /*int recvcount = 0;
-      for(int p = 0; p < numproc_node; p++)
-        if(nodesendcomm[p])
-          if(p==myid)
-            cudaMemcpy(nodereducerecvbuff_d+noderecvcommdispl[p]*FFACTOR,nodereducesendbuff_d+nodesendcommdispl[p]*FFACTOR,nodesendcomm[p]*FFACTOR*sizeof(COMMPREC),cudaMemcpyDeviceToDevice);
-          else
-            MPI_Issend(nodereducesendbuff_d+nodesendcommdispl[p]*FFACTOR,nodesendcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_NODE,sendrequest+p);
-      for(int p = 0; p < numproc_node; p++)
-        if(noderecvcomm[p] && p!=myid){
-          MPI_Irecv(nodereducerecvbuff_d+noderecvcommdispl[p]*FFACTOR,noderecvcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_NODE,recvrequest+recvcount);
-          recvcount++;
-        }
-      MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);*/
       MPI_Barrier(MPI_COMM_NODE);
-      if(myid==0)printf("node warmup time %e\n",MPI_Wtime()-time);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      if(myid==0)printf("proj node warmup time %e\n",MPI_Wtime()-time);
     }
     {
+      cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_NODE);
       double time = MPI_Wtime();
       for(int psend = 0; psend < numproc_node; psend++)
-        if(nodesendcomm[psend])
+        if(nodesendcomm[psend]){
           cudaMemcpyPeerAsync(nodereducesendbuff_d+nodesendcommdispl[psend]*FFACTOR,mydevice,noderecvbuff_p[psend]+noderecvbuffdispl_p[psend]*FFACTOR,noderecvdevice_p[psend],sizeof(COMMPREC)*nodesendcomm[psend]*FFACTOR);
-      cudaDeviceSynchronize();
-      /*int sendcount = 0;
-      for(int p = 0; p < numproc_node; p++)
-        if(nodesendcomm[p] && p!=myid){
-          MPI_Irecv(nodereducesendbuff_d+nodesendcommdispl[p]*FFACTOR,nodesendcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_NODE,sendrequest+sendcount);
-          sendcount++;
+          if(psend/numproc_socket != myid_node/numproc_socket)
+            back_internode += nodesendcomm[psend];
         }
-      for(int p = 0; p < numproc_node; p++)
-        if(noderecvcomm[p])
-          if(p==myid)
-            cudaMemcpy(nodereducesendbuff_d+nodesendcommdispl[p]*FFACTOR,nodereducerecvbuff_d+noderecvcommdispl[p]*FFACTOR,nodesendcomm[p]*FFACTOR*sizeof(COMMPREC),cudaMemcpyDeviceToDevice);
-          else
-            MPI_Issend(nodereducerecvbuff_d+noderecvcommdispl[p]*FFACTOR,noderecvcomm[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_NODE,recvrequest+p);
-      MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);*/
+      cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_NODE);
-      if(myid==0)printf("node warmup time %e\n",MPI_Wtime()-time);
+      MPI_Allreduce(MPI_IN_PLACE,&back_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      if(myid==0)printf("back node warmup time %e\n",MPI_Wtime()-time);
     }
   }
   //HOST IPC WARM-UP
@@ -248,8 +223,11 @@ void communications(){
       double chtime = MPI_Wtime();
       int recvcount = 0;
       for(int p = 0; p < numproc; p++)
-        if(nodereduceout[p])
+        if(nodereduceout[p]){
           MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+p);
+          if(p/numproc_node != myid/numproc_node)
+            proj_interhost += nodereduceout[p];
+        }
       for(int p = 0; p < numproc; p++){
         if(nodereduceinc[p]){
           MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+recvcount);
@@ -258,7 +236,8 @@ void communications(){
       }
       MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
       MPI_Barrier(MPI_COMM_WORLD);
-      if(myid==0)printf("rack time %e\n",MPI_Wtime()-chtime);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      if(myid==0)printf("proj host time %e\n",MPI_Wtime()-chtime);
     }
     {
       MPI_Barrier(MPI_COMM_WORLD);
@@ -270,11 +249,15 @@ void communications(){
           sendcount++;
         }
       for(int p = 0; p < numproc; p++)
-        if(nodereduceinc[p])
+        if(nodereduceinc[p]){
           MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+p);
+          if(p/numproc_node != myid/numproc_node)
+            back_interhost += nodereduceinc[p];
+        }
       MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
       MPI_Barrier(MPI_COMM_WORLD);
-      if(myid==0)printf("rack time %e\n",MPI_Wtime()-chtime);
+      MPI_Allreduce(MPI_IN_PLACE,&back_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      if(myid==0)printf("back host time %e\n",MPI_Wtime()-chtime);
     }
   }
 }

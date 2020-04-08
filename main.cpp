@@ -236,7 +236,7 @@ int main(int argc, char** argv){
     #ifdef OVERLAP
     printf("COMMUNICATIONS OVERLAPPED\n");
     #else
-    printf("COMMUNICATIONS NOT OVERLAPPED\n");
+    printf("COMMUNICATIONS SYNCHRONIZED\n");
     #endif
     printf("\n");
   }
@@ -247,27 +247,15 @@ int main(int argc, char** argv){
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("PREPROCESSING TIME: %e\n",MPI_Wtime()-timep);
 
-  double *obj_h;//OBJECT
-  double *gra_h;//GRADIENT
-  double *dir_h;//DIRECTION
-  double *mes_h;//MEASUREMENT
-  double *ray_h;//RAYSUM
-  double *res_h;//RESIDUE
-  cudaMallocHost((void**)&obj_h,sizeof(double)*mynumpix*batchsize);
-  cudaMallocHost((void**)&gra_h,sizeof(double)*mynumpix*batchsize);
-  cudaMallocHost((void**)&dir_h,sizeof(double)*mynumpix*batchsize);
-  cudaMallocHost((void**)&mes_h,sizeof(double)*mynumray*batchsize);
-  cudaMallocHost((void**)&res_h,sizeof(double)*mynumray*batchsize);
-  cudaMallocHost((void**)&ray_h,sizeof(double)*mynumray*batchsize);
-
   double *obj_d;//OBJECT
   double *gra_d;//GRADIENT
   double *dir_d;//DIRECTION
-  double *mes_d;//MEASUREMENT
-  double *ray_d;//RAYSUM
   double *res_d;//RESIDUE
+  double *ray_d;//RAYSUM
+  double *obj_h;//OBJECT
+  double *res_h;//RESIDUE
 
-  setup_gpu(&obj_d,&gra_d,&dir_d,&mes_d,&res_d,&ray_d);
+  setup_gpu(&obj_d,&gra_d,&dir_d,&res_d,&ray_d,&obj_h,&res_h);
 
   double backscale = 1.0;
   double projscale = 1.0;
@@ -314,7 +302,6 @@ int main(int argc, char** argv){
       extern int *raystart;
       extern long *mesglobalind;
       MPI_Request sendrequest[numproc];
-      MPI_Request recvrequest;
       if(myid==0){
         double readtime = MPI_Wtime();
         fread(mesreadbuff,sizeof(float),(long)numr*numt*batchsize,inputf);
@@ -323,71 +310,61 @@ int main(int argc, char** argv){
         #pragma omp parallel for
         for(long n = 0; n < (long)numray*batchsize; n++){
           long ind = mesglobalind[n];
-          if(ind > -1)
-            raysendbuff[n] = mesreadbuff[ind];
-          else
-            raysendbuff[n] = 0;
+          if(ind > -1)raysendbuff[n] = mesreadbuff[ind];
+          else raysendbuff[n] = 0;
         }
         for(int p = 0; p < numproc; p++)
           MPI_Issend(raysendbuff+(long)raystart[p]*batchsize,numrays[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,sendrequest+p);
       }
-      MPI_Irecv(rayrecvbuff,mynumray*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,&recvrequest);
-      MPI_Wait(&recvrequest,MPI_STATUS_IGNORE);
+      MPI_Recv(rayrecvbuff,mynumray*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
       #pragma omp parallel for
       for(int n = 0; n < mynumray*batchsize; n++)
-        mes_h[n] = rayrecvbuff[n];
+        res_h[n] = rayrecvbuff[n];
       //READ COMPLETE
-      cudaMemcpy(mes_d,mes_h,sizeof(double)*mynumray*batchsize,cudaMemcpyHostToDevice);
-      cudaMemset(obj_d,0,sizeof(double)*mynumpix*batchsize);
+      copyH2D_kernel(res_d,res_h,mynumray*batchsize);
+      init_kernel(obj_d,mynumpix*batchsize);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     iotime += MPI_Wtime()-time;
     //FIND GRADIENT
-    double resnorm = norm_kernel(mes_h,mynumray*batchsize);
-    double resmax = max_kernel(mes_h,mynumray*batchsize);
+    double resnorm = dot_kernel(res_d,res_d,mynumray*batchsize);
+    double mesnorm = resnorm;
+    double resmax = max_kernel(res_h,mynumray*batchsize);
     backscale = 64.0e3/(resmax*back_rowmax);
-    backproject(gra_d,mes_d,backscale);
-    cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
-    double gradnorm = norm_kernel(gra_h,mynumpix*batchsize);
-    double dirmax = max_kernel(gra_h,mynumpix*batchsize);
+    backproject(gra_d,res_d,backscale);
+    double gradnorm = dot_kernel(gra_d,gra_d,mynumpix*batchsize);
+    double dirmax = max_kernel(gra_d,mynumpix*batchsize);
     double objnorm = 0.0;
-    if(myid==0)printf("iter: %d resnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e\n",0,resnorm,resmax,dirmax,objnorm,backscale);
+    if(myid==0)printf("iter: %d resnorm: %e relnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e\n",0,resnorm,1.0,resmax,dirmax,objnorm,backscale);
     //SAVE DIRECTION
     double oldgradnorm = gradnorm;
-    copy_kernel(dir_d,gra_d,mynumpix*batchsize);
-    copy_kernel(res_d,mes_d,mynumray*batchsize);
+    copyD2D_kernel(dir_d,gra_d,mynumpix*batchsize);
     //START ITERATIONS
     for(int iter = 1; iter <= numiter; iter++){
       //PROJECT DIRECTION
       projscale = 64.0e3/(dirmax*proj_rowmax);
       project(ray_d,dir_d,projscale);
-      cudaMemcpy(ray_h,ray_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
-      cudaMemcpy(res_h,res_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
       //FIND STEP SIZE
-      double temp1 = dot_kernel(res_h,ray_h,mynumray*batchsize);
-      double temp2 = norm_kernel(ray_h,mynumray*batchsize);
+      double temp1 = dot_kernel(res_d,ray_d,mynumray*batchsize);
+      double temp2 = dot_kernel(ray_d,ray_d,mynumray*batchsize);
       //STEP SIZE
       double alpha = temp1/temp2;
       saxpy_kernel(obj_d,obj_d,alpha,dir_d,mynumpix*batchsize);
-      cudaMemcpy(obj_h,obj_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
-      objnorm = norm_kernel(obj_h,mynumpix*batchsize);
+      objnorm = dot_kernel(obj_d,obj_d,mynumpix*batchsize);
       //FIND RESIDUAL ERROR
       saxpy_kernel(res_d,res_d,-alpha,ray_d,mynumray*batchsize);
-      cudaMemcpy(res_h,res_d,sizeof(double)*mynumray*batchsize,cudaMemcpyDeviceToHost);
-      resnorm = norm_kernel(res_h,mynumray*batchsize);
-      resmax = max_kernel(res_h,mynumray*batchsize);
+      resnorm = dot_kernel(res_d,res_d,mynumray*batchsize);
+      resmax = max_kernel(res_d,mynumray*batchsize);
       //FIND GRADIENT
       backscale = 64.0e3/(resmax*back_rowmax);
       backproject(gra_d,res_d,backscale);
-      cudaMemcpy(gra_h,gra_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
-      gradnorm = norm_kernel(gra_h,mynumpix*batchsize);
-      if(myid==0)printf("iter: %d resnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e pscale %e\n",iter,resnorm,resmax,dirmax,objnorm,backscale,projscale);
+      gradnorm = dot_kernel(gra_d,gra_d,mynumpix*batchsize);
+      if(myid==0)printf("iter: %d resnorm: %e relnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e pscale %e\n",iter,resnorm,resnorm/mesnorm,resmax,dirmax,objnorm,backscale,projscale);
       //UPDATE DIRECTION
       double beta = gradnorm/oldgradnorm;
       oldgradnorm = gradnorm;
       saxpy_kernel(dir_d,gra_d,beta,dir_d,mynumpix*batchsize);
-      cudaMemcpy(dir_h,dir_d,sizeof(double)*mynumpix*batchsize,cudaMemcpyDeviceToHost);
-      dirmax = max_kernel(dir_h,mynumpix*batchsize);
+      dirmax = max_kernel(dir_d,mynumpix*batchsize);
     }
     //WRITE OUTPUT BATCH
     MPI_Barrier(MPI_COMM_WORLD);
@@ -397,14 +374,15 @@ int main(int argc, char** argv){
       extern int *pixstart;
       extern long *objglobalind;
       MPI_Request recvrequest[numproc];
-      MPI_Request sendrequest;
+      copyD2H_kernel(obj_h,obj_d,mynumpix*batchsize);
       #pragma omp parallel for
       for(int n = 0; n < mynumpix*batchsize; n++)
         pixsendbuff[n] = obj_h[n];
-      MPI_Issend(pixsendbuff,mynumpix*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,&sendrequest);
-      if(myid == 0){
+      if(myid == 0)
         for(int p = 0; p < numproc; p++)
           MPI_Irecv(pixrecvbuff+(long)pixstart[p]*batchsize,numpixs[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,recvrequest+p);
+      MPI_Ssend(pixsendbuff,mynumpix*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD);
+      if(myid == 0){
         MPI_Waitall(numproc,recvrequest,MPI_STATUSES_IGNORE);
         #pragma omp parallel for
         for(long n = 0; n < (long)numx*numy*batchsize; n++)
@@ -511,22 +489,34 @@ int main(int argc, char** argv){
     printf("PERGPU pkernel %f bkernel %f agg %f GB/s GLOBAL\n",projglobalbw/numproc,backglobalbw/numproc,globalbw/numproc);
     printf("PERGPU pkernel %f bkernel %f agg %f GB/s SHARED\n",projsharedbw/numproc,backsharedbw/numproc,sharedbw/numproc);
     printf("\n");
-    double socketdata = 2.0*raynumoutall*sizeof(COMMPREC)*(numproj+numback)/1.0e9*FFACTOR;
-    double nodedata = 2.0*socketrayoutall*sizeof(COMMPREC)*(numproj+numback)/1.0e9*FFACTOR;
-    double hostdata = 2.0*noderayoutall*sizeof(COMMPREC)*(numproj+numback)/1.0e9*FFACTOR;
+    extern long proj_intersocket;
+    extern long proj_internode;
+    extern long proj_interhost;
+    extern long back_intersocket;
+    extern long back_internode;
+    extern long back_interhost;
+    double socketdata = 2.0*raynumoutall/1.0e9*sizeof(COMMPREC)*(numproj+numback)*FFACTOR;
+    double nodedata = 2.0*socketrayoutall/1.0e9*sizeof(COMMPREC)*(numproj+numback)*FFACTOR;
+    double hostdata = 2.0*noderayoutall/1.0e9*sizeof(COMMPREC)*(numproj+numback)*FFACTOR;
+    double socketdatareal = (proj_intersocket+back_intersocket)/1.0e9*sizeof(COMMPREC)*(numproj+numback)*FFACTOR;
+    double nodedatareal = (proj_internode+back_internode)/1.0e9*sizeof(COMMPREC)*(numproj+numback)*FFACTOR;
+    double hostdatareal = (proj_interhost+back_interhost)/1.0e9*sizeof(COMMPREC)*(numproj+numback)*FFACTOR;
     double socketbw = socketdata/(pcstime+bcstime)*numproc;
     double nodebw = nodedata/(pcntime+bcntime)*numproc;
     double hostbw = hostdata/(pchtime+bchtime)*numproc;
     double memcpybw = hostdata/(pmtime+bmtime)*numproc;
-    printf("AGGREGATE MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata,socketdata,nodedata,hostdata);
-    printf("PERNODE MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata/numnode,socketdata/numnode,nodedata/numnode,hostdata/numnode);
-    printf("PERSCKT MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata/numsocket,socketdata/numsocket,nodedata/numsocket,hostdata/numsocket);
-    printf("PERGPU MEMCPY %f GB SOCKET %f GB NODE %f GB HOST %f GB\n",hostdata/numproc,socketdata/numproc,nodedata/numproc,hostdata/numproc);
+    double socketbwreal = socketdatareal/(pcstime+bcstime)*numproc;
+    double nodebwreal = nodedatareal/(pcntime+bcntime)*numproc;
+    double hostbwreal = hostdatareal/(pchtime+bchtime)*numproc;
+    printf("AGGREGATE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata,socketdata,socketdatareal,nodedata,nodedatareal,hostdata,hostdatareal);
+    printf("PERNODE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/numnode,socketdata/numnode,socketdatareal/numnode,nodedata/numnode,nodedatareal/numnode,hostdata/numnode,hostdatareal/numnode);
+    printf("PERSCKT MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/numsocket,socketdata/numsocket,socketdatareal/numsocket,nodedata/numsocket,nodedatareal/numsocket,hostdata/numsocket,hostdatareal/numsocket);
+    printf("PERGPU MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/numproc,socketdata/numproc,socketdatareal/numproc,nodedata/numproc,nodedatareal/numproc,hostdata/numproc,hostdatareal/numproc);
     printf("\n");
-    printf("AGGREGATE MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw,socketbw,nodebw,hostbw);
-    printf("PERNODE MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numnode,socketbw/numnode,nodebw/numnode,hostbw/numnode);
-    printf("PERSCKT MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numsocket,socketbw/numsocket,nodebw/numsocket,hostbw/numsocket);
-    printf("PERGPU MEMCPY %f GB/s SOCKET %f GB/s NODE %f GB/s HOST %f GB/s\n",memcpybw/numproc,socketbw/numproc,nodebw/numproc,hostbw/numproc);
+    printf("AGGREGATE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw,socketbw,socketbwreal,nodebw,nodebwreal,hostbw,hostbwreal);
+    printf("PERNODE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/numnode,socketbw/numnode,socketbwreal/numnode,nodebw/numnode,nodebwreal/numnode,hostbw/numnode,hostbwreal/numnode);
+    printf("PERSCKT MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/numsocket,socketbw/numsocket,socketbwreal/numsocket,nodebw/numsocket,nodebwreal/numsocket,hostbw/numsocket,hostbwreal/numsocket);
+    printf("PERGPU MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/numproc,socketbw/numproc,socketbwreal/numproc,nodebw/numproc,nodebwreal/numproc,hostbw/numproc,hostbwreal/numproc);
     printf("\n");
   }
 
@@ -566,31 +556,4 @@ int main(int argc, char** argv){
   MPI_Finalize();
 
   return 0;
-}
-
-double norm_kernel(double *a, int dim){
-  double reduce = 0;
-  #pragma omp parallel for reduction(+:reduce)
-  for(int n = 0; n < dim; n++)
-    reduce += norm(a[n]);
-  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-  return reduce;
-};
-double max_kernel(double *a, int dim){
-  double reduce = 0;
-  #pragma omp parallel for reduction(max:reduce)
-  for(int n = 0; n < dim; n++){
-    double test = abs(a[n]);
-    if(test>reduce)reduce=test;
-  }
-  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
-  return reduce;
-};
-double dot_kernel(double *a, double *b, int dim){
-  double reduce = 0;
-  #pragma omp parallel for reduction(+:reduce)
-  for(int n = 0; n < dim; n++)
-    reduce += a[n]*b[n];
-  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-  return reduce;
 };

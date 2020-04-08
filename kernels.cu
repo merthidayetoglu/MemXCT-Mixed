@@ -191,6 +191,8 @@ __global__ void kernel_COMMPREC2VECPREC(VECPREC*,COMMPREC*,int,int*);
 
 void partial_project();
 void partial_backproject();
+double *reducebuff_d;
+double *reducebuff_h;
 
 int numdevice;
 int mydevice;
@@ -201,7 +203,7 @@ MPI_Request *recvrequest;
 cudaStream_t *socketstream;
 cudaStream_t *nodestream;
 
-void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **res, double **ray){
+void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, double **ray_d, double **obj_h, double **res_h){
 
   cudaGetDeviceCount(&numdevice);
   mydevice = myid%numdevice;
@@ -229,17 +231,31 @@ void setup_gpu(double **obj, double **gra, double **dir, double **mes, double **
   //CONJUGATE-GRADIENT BUFFERS
   double batchmem = 0.0;
   batchmem += sizeof(double)*mynumpix*batchsize/1.0e9;
+  if(mynumpix > mynumray)
+    batchmem += sizeof(double)*mynumpix*batchsize/1.0e9;
+  else
+    batchmem += sizeof(double)*mynumray*batchsize/1.0e9;
   batchmem += sizeof(double)*mynumpix*batchsize/1.0e9;
-  batchmem += sizeof(double)*mynumpix*batchsize/1.0e9;
   batchmem += sizeof(double)*mynumray*batchsize/1.0e9;
-  batchmem += sizeof(double)*mynumray*batchsize/1.0e9;
-  batchmem += sizeof(double)*mynumray*batchsize/1.0e9;
-  cudaMalloc((void**)obj,sizeof(double)*mynumpix*batchsize);
-  cudaMalloc((void**)gra,sizeof(double)*mynumpix*batchsize);
-  cudaMalloc((void**)dir,sizeof(double)*mynumpix*batchsize);
-  cudaMalloc((void**)mes,sizeof(double)*mynumray*batchsize);
-  cudaMalloc((void**)res,sizeof(double)*mynumray*batchsize);
-  cudaMalloc((void**)ray,sizeof(double)*mynumray*batchsize);
+  cudaMalloc((void**)obj_d,sizeof(double)*mynumpix*batchsize);
+  if(mynumpix > mynumray)
+    cudaMalloc((void**)gra_d,sizeof(double)*mynumpix*batchsize);
+  else
+    cudaMalloc((void**)gra_d,sizeof(double)*mynumray*batchsize);
+  cudaMalloc((void**)dir_d,sizeof(double)*mynumpix*batchsize);
+  cudaMalloc((void**)res_d,sizeof(double)*mynumray*batchsize);
+  *ray_d = *gra_d;
+  cudaMallocHost((void**)obj_h,sizeof(double)*mynumpix*batchsize);
+  cudaMallocHost((void**)res_h,sizeof(double)*mynumray*batchsize);
+  //REDUCTION BUFFERS
+  int reducebuffsize = 0;
+  if(mynumpix > mynumray)
+    reducebuffsize = (mynumpix*batchsize+255)/256;
+  else
+    reducebuffsize = (mynumray*batchsize+255)/256;
+  if(myid==0)printf("reducebuffsize: %d\n",reducebuffsize);
+  cudaMalloc((void**)&reducebuff_d,sizeof(double)*reducebuffsize);
+  cudaMallocHost((void**)&reducebuff_h,sizeof(double)*reducebuffsize);
 
   double projmem = 0.0;
   projmem = projmem + sizeof(int)/1.0e9*(proj_numblocks+1);
@@ -740,7 +756,7 @@ __global__ void kernel_project(VECPREC *y, VECPREC *x, unsigned short *index, MA
   if(row  < numrow)
     for(int f = 0; f < FFACTOR; f++)
       y[f*numrow+row] = acc[f];
-}
+};
 __global__ void kernel_reduce(COMMPREC *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *packmap, int *unpackmap){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
   #ifdef MIXED
@@ -761,7 +777,7 @@ __global__ void kernel_reduce(COMMPREC *y, COMMPREC *x, int *displ, int *index, 
     for(int f = 0; f < FFACTOR; f++)
       y[packmap[f*numrow+row]] = reduce[f];
   }
-}
+};
 __global__ void kernel_reducenopack(double *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *unpackmap, double scale){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
   #ifdef MIXED
@@ -782,7 +798,7 @@ __global__ void kernel_reducenopack(double *y, COMMPREC *x, int *displ, int *ind
     for(int f = 0; f < FFACTOR; f++)
       y[f*numrow+row] = (double)reduce[f]*scale;
   }
-}
+};
 __global__ void kernel_scatternopack(double *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *unpackmap, double scale){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
   VECPREC scatter[FFACTOR] = {0.0};
@@ -795,7 +811,7 @@ __global__ void kernel_scatternopack(double *y, COMMPREC *x, int *displ, int *in
         x[unpackmap[f*numcol+ind]] = scatter[f];
     }
   }
-}
+};
 __global__ void kernel_scatter(COMMPREC *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *packmap, int *unpackmap){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
   VECPREC scatter[FFACTOR] = {0.0};
@@ -808,7 +824,7 @@ __global__ void kernel_scatter(COMMPREC *y, COMMPREC *x, int *displ, int *index,
         x[unpackmap[f*numcol+ind]] = scatter[f];
     }
   }
-}
+};
 __global__ void kernel_double2VECPREC(VECPREC *y, double *x,int dim, double scale){
   int tid = blockIdx.x*blockDim.x+threadIdx.x;
   if(tid < dim)
@@ -829,8 +845,17 @@ __global__ void kernel_COMMPREC2VECPREC(VECPREC *y, COMMPREC *x,int dim, int *un
   if(tid < dim)
     y[tid] = x[unpackmap[tid]];
 };
-void copy_kernel(double *a, double *b, int dim){
+void copyD2D_kernel(double *a, double *b, int dim){
   cudaMemcpy(a,b,sizeof(double)*dim,cudaMemcpyDeviceToDevice);
+};
+void copyD2H_kernel(double *a, double *b, int dim){
+  cudaMemcpy(a,b,sizeof(double)*dim,cudaMemcpyDeviceToHost);
+};
+void copyH2D_kernel(double *a, double *b, int dim){
+  cudaMemcpy(a,b,sizeof(double)*dim,cudaMemcpyHostToDevice);
+};
+void init_kernel(double *a, int dim){
+  cudaMemset(a,0,sizeof(double)*dim);
 };
 __global__ void kernel_saxpy(double *a, double *b, double coef, double *c, int dim){
   int tid = blockIdx.x*blockDim.x+threadIdx.x;
@@ -847,4 +872,56 @@ __global__ void kernel_scale(double *a,  double coef, int dim){
 };
 void scale_kernel(double *a, double coef, int dim){
   kernel_scale<<<(dim+255)/256,256>>>(a,coef,dim);
+};
+__global__ void kernel_dot(double *a, double *b, int dim, double *buffer){
+  extern __shared__ double temp[];
+  int tid = blockIdx.x*blockDim.x+threadIdx.x;
+  if(tid < dim)
+    temp[threadIdx.x] = a[tid]*b[tid];
+  else
+    temp[threadIdx.x] = 0;
+  for(int stride = blockDim.x/2; stride > 0; stride>>=1){
+    __syncthreads();
+    if(threadIdx.x < stride)
+      temp[threadIdx.x] += temp[threadIdx.x+stride];
+  }
+  if(threadIdx.x==0)
+    buffer[blockIdx.x] = temp[0];
+};
+double dot_kernel(double *a, double *b, int dim){
+  int numblocks = (dim+255)/256;
+  kernel_dot<<<numblocks,256,sizeof(double)*256>>>(a,b,dim,reducebuff_d);
+  cudaMemcpy(reducebuff_h,reducebuff_d,sizeof(double)*numblocks,cudaMemcpyDeviceToHost);
+  double reduce = 0.0;
+  for(int n = 0; n < numblocks; n++)
+    reduce += reducebuff_h[n];
+  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  return reduce;
+};
+__global__ void kernel_max(double *a, int dim, double *buffer){
+  extern __shared__ double temp[];
+  int tid = blockIdx.x*blockDim.x+threadIdx.x;
+  if(tid < dim)
+    temp[threadIdx.x] = a[tid];
+  else
+    temp[threadIdx.x] = 0.0;
+  for(int stride = blockDim.x/2; stride > 0; stride>>=1){
+    __syncthreads();
+    if(threadIdx.x < stride)
+      if(temp[threadIdx.x+stride] > temp[threadIdx.x])
+        temp[threadIdx.x] = temp[threadIdx.x+stride];
+  }
+  if(threadIdx.x==0)
+    buffer[blockIdx.x] = temp[0];
+};
+double max_kernel(double *a, int dim){
+  int numblocks = (dim+255)/256;
+  kernel_max<<<numblocks,256,sizeof(double)*256>>>(a,dim,reducebuff_d);
+  cudaMemcpy(reducebuff_h,reducebuff_d,sizeof(double)*numblocks,cudaMemcpyDeviceToHost);
+  double reduce = 0.0;
+  for(int n = 0; n < numblocks; n++)
+    if(reducebuff_h[n] > reduce)
+      reduce = reducebuff_h[n];
+  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+  return reduce;
 };
