@@ -39,14 +39,20 @@ extern int *nodeunpackmap;
 extern int numthreads;
 extern int numproc;
 extern int myid;
-extern MPI_Comm MPI_COMM_SOCKET;
-extern int numproc_socket;
-extern int myid_socket;
-extern int numsocket;
+extern MPI_Comm MPI_COMM_BATCH;
+extern int numproc_batch;
+extern int myid_batch;
+extern MPI_Comm MPI_COMM_DATA;
+extern int numproc_data;
+extern int myid_data;
 extern MPI_Comm MPI_COMM_NODE;
 extern int numproc_node;
 extern int myid_node;
 extern int numnode;
+extern MPI_Comm MPI_COMM_SOCKET;
+extern int numproc_socket;
+extern int myid_socket;
+extern int numsocket;
 
 extern int *socketpackmap_d;
 extern int *socketunpackmap_d;
@@ -89,8 +95,8 @@ long back_interhost = 0;
 
 void communications(){
 
-  MPI_Request sendrequest[numproc];
-  MPI_Request recvrequest[numproc];
+  MPI_Request sendrequest[numproc_data];
+  MPI_Request recvrequest[numproc_data];
 
   socketrecvbuff_p = new COMMPREC*[numproc_socket];
   socketrecvbuffdispl_p = new int[numproc_socket];
@@ -135,7 +141,7 @@ void communications(){
       }
       cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_SOCKET);
-      MPI_Allreduce(MPI_IN_PLACE,&proj_intersocket,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_intersocket,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("proj socket warmup time %e\n",MPI_Wtime()-time);
     }
     {
@@ -150,7 +156,7 @@ void communications(){
         }
       cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_SOCKET);
-      MPI_Allreduce(MPI_IN_PLACE,&back_intersocket,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE,&back_intersocket,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("back socket warmup time %e\n",MPI_Wtime()-time);
     }
   }
@@ -197,7 +203,7 @@ void communications(){
       }
       cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_NODE);
-      MPI_Allreduce(MPI_IN_PLACE,&proj_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("proj node warmup time %e\n",MPI_Wtime()-time);
     }
     {
@@ -212,51 +218,51 @@ void communications(){
         }
       cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_NODE);
-      MPI_Allreduce(MPI_IN_PLACE,&back_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE,&back_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("back node warmup time %e\n",MPI_Wtime()-time);
     }
   }
   //HOST IPC WARM-UP
   {
     {
-      MPI_Barrier(MPI_COMM_WORLD);
+      MPI_Barrier(MPI_COMM_DATA);
       double chtime = MPI_Wtime();
       int recvcount = 0;
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         if(nodereduceout[p]){
-          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+p);
-          if(p/numproc_node != myid/numproc_node)
+          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+p);
+          if(p/numproc_node != myid_data/numproc_node)
             proj_interhost += nodereduceout[p];
         }
-      for(int p = 0; p < numproc; p++){
+      for(int p = 0; p < numproc_data; p++){
         if(nodereduceinc[p]){
-          MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+recvcount);
+          MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+recvcount);
           recvcount++;
         }
       }
       MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
-      MPI_Barrier(MPI_COMM_WORLD);
-      MPI_Allreduce(MPI_IN_PLACE,&proj_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      MPI_Barrier(MPI_COMM_DATA);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("proj host time %e\n",MPI_Wtime()-chtime);
     }
     {
-      MPI_Barrier(MPI_COMM_WORLD);
+      MPI_Barrier(MPI_COMM_DATA);
       double chtime = MPI_Wtime();
       int sendcount = 0;
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         if(nodereduceout[p]){
-          MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+sendcount);
+          MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+sendcount);
           sendcount++;
         }
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         if(nodereduceinc[p]){
-          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+p);
-          if(p/numproc_node != myid/numproc_node)
+          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+p);
+          if(p/numproc_node != myid_data/numproc_node)
             back_interhost += nodereduceinc[p];
         }
       MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
-      MPI_Barrier(MPI_COMM_WORLD);
-      MPI_Allreduce(MPI_IN_PLACE,&back_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+      MPI_Barrier(MPI_COMM_DATA);
+      MPI_Allreduce(MPI_IN_PLACE,&back_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("back host time %e\n",MPI_Wtime()-chtime);
     }
   }

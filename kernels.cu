@@ -135,14 +135,20 @@ extern int *rayunpackmap;
 extern int numthreads;
 extern int numproc;
 extern int myid;
-extern MPI_Comm MPI_COMM_SOCKET;
-extern int numproc_socket;
-extern int myid_socket;
-extern int numsocket;
+extern MPI_Comm MPI_COMM_BATCH;
+extern int numproc_batch;
+extern int myid_batch;
+extern MPI_Comm MPI_COMM_DATA;
+extern int numproc_data;
+extern int myid_data;
 extern MPI_Comm MPI_COMM_NODE;
 extern int numproc_node;
 extern int myid_node;
 extern int numnode;
+extern MPI_Comm MPI_COMM_SOCKET;
+extern int numproc_socket;
+extern int myid_socket;
+extern int numsocket;
 
 int *socketpackmap_d;
 int *socketunpackmap_d;
@@ -338,64 +344,64 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
   commem += sizeof(COMMPREC)*socketrecvcommdispl[numproc_socket]*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*nodesendcommdispl[numproc_node]*FFACTOR/1.0e9;
   commem += sizeof(COMMPREC)*noderecvcommdispl[numproc_node]*FFACTOR/1.0e9;
-  commem += sizeof(COMMPREC)*nodereduceoutdispl[numproc]*FFACTOR/1.0e9;
-  commem += sizeof(COMMPREC)*nodereduceincdispl[numproc]*FFACTOR/1.0e9;
+  commem += sizeof(COMMPREC)*nodereduceoutdispl[numproc_data]*FFACTOR/1.0e9;
+  commem += sizeof(COMMPREC)*nodereduceincdispl[numproc_data]*FFACTOR/1.0e9;
   cudaMalloc((void**)&tomobuff_d,sizeof(VECPREC)*mynumpix*FFACTOR);
   cudaMalloc((void**)&partbuff_d,sizeof(VECPREC)*raynumout*FFACTOR);
   cudaMalloc((void**)&socketreducesendbuff_d,sizeof(COMMPREC)*socketsendcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&socketreducerecvbuff_d,sizeof(COMMPREC)*socketrecvcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&nodereducesendbuff_d,sizeof(COMMPREC)*nodesendcommdispl[numproc_node]*FFACTOR);
   cudaMalloc((void**)&nodereducerecvbuff_d,sizeof(COMMPREC)*noderecvcommdispl[numproc_node]*FFACTOR);
-  cudaMalloc((void**)&nodesendbuff_d,sizeof(COMMPREC)*nodereduceoutdispl[numproc]*FFACTOR);
-  cudaMalloc((void**)&noderecvbuff_d,sizeof(COMMPREC)*nodereduceincdispl[numproc]*FFACTOR);
+  cudaMalloc((void**)&nodesendbuff_d,sizeof(COMMPREC)*nodereduceoutdispl[numproc_data]*FFACTOR);
+  cudaMalloc((void**)&noderecvbuff_d,sizeof(COMMPREC)*nodereduceincdispl[numproc_data]*FFACTOR);
   //HOST BUFFER
-  cudaMallocHost((void**)&nodesendbuff_h,sizeof(COMMPREC)*nodereduceoutdispl[numproc]*FFACTOR);
-  cudaMallocHost((void**)&noderecvbuff_h,sizeof(COMMPREC)*nodereduceincdispl[numproc]*FFACTOR);
+  cudaMallocHost((void**)&nodesendbuff_h,sizeof(COMMPREC)*nodereduceoutdispl[numproc_data]*FFACTOR);
+  cudaMallocHost((void**)&noderecvbuff_h,sizeof(COMMPREC)*nodereduceincdispl[numproc_data]*FFACTOR);
   //PACK AND UNPACK MAPS
   commem += sizeof(int)*socketsendcommdispl[numproc_socket]*FFACTOR/1.0e9;
   commem += sizeof(int)*socketrecvcommdispl[numproc_socket]*FFACTOR/1.0e9;
-  commem += sizeof(int)*(socketreduceoutdispl[numproc]+1)/1.0e9;
-  commem += sizeof(int)*socketreducedispl[socketreduceoutdispl[numproc]]/1.0e9;
-  commem += sizeof(int)*socketreduceoutdispl[numproc]*FFACTOR/1.0e9;
+  commem += sizeof(int)*(socketreduceoutdispl[numproc_data]+1)/1.0e9;
+  commem += sizeof(int)*socketreducedispl[socketreduceoutdispl[numproc_data]]/1.0e9;
+  commem += sizeof(int)*socketreduceoutdispl[numproc_data]*FFACTOR/1.0e9;
   commem += sizeof(int)*noderecvcommdispl[numproc_node]*FFACTOR/1.0e9;
-  commem += sizeof(int)*(nodereduceoutdispl[numproc]+1)/1.0e9;
-  commem += sizeof(int)*nodereducedispl[nodereduceoutdispl[numproc]]/1.0e9;
-  commem += sizeof(int)*nodereduceoutdispl[numproc]*FFACTOR/1.0e9;
-  commem += sizeof(int)*nodereduceincdispl[numproc]*FFACTOR/1.0e9;
+  commem += sizeof(int)*(nodereduceoutdispl[numproc_data]+1)/1.0e9;
+  commem += sizeof(int)*nodereducedispl[nodereduceoutdispl[numproc_data]]/1.0e9;
+  commem += sizeof(int)*nodereduceoutdispl[numproc_data]*FFACTOR/1.0e9;
+  commem += sizeof(int)*nodereduceincdispl[numproc_data]*FFACTOR/1.0e9;
   commem += sizeof(int)*(mynumray+1)/1.0e9;
   commem += sizeof(int)*noderaydispl[mynumray]/1.0e9;
   cudaMalloc((void**)&socketpackmap_d,sizeof(int)*socketsendcommdispl[numproc_socket]*FFACTOR);
   cudaMalloc((void**)&socketunpackmap_d,sizeof(int)*socketrecvcommdispl[numproc_socket]*FFACTOR);
-  cudaMalloc((void**)&socketreducedispl_d,sizeof(int)*(socketreduceoutdispl[numproc]+1));
-  cudaMalloc((void**)&socketreduceindex_d,sizeof(int)*socketreducedispl[socketreduceoutdispl[numproc]]);
-  cudaMalloc((void**)&nodepackmap_d,sizeof(int)*socketreduceoutdispl[numproc]*FFACTOR);
+  cudaMalloc((void**)&socketreducedispl_d,sizeof(int)*(socketreduceoutdispl[numproc_data]+1));
+  cudaMalloc((void**)&socketreduceindex_d,sizeof(int)*socketreducedispl[socketreduceoutdispl[numproc_data]]);
+  cudaMalloc((void**)&nodepackmap_d,sizeof(int)*socketreduceoutdispl[numproc_data]*FFACTOR);
   cudaMalloc((void**)&nodeunpackmap_d,sizeof(int)*noderecvcommdispl[numproc_node]*FFACTOR);
-  cudaMalloc((void**)&nodereducedispl_d,sizeof(int)*(nodereduceoutdispl[numproc]+1));
-  cudaMalloc((void**)&nodereduceindex_d,sizeof(int)*nodereducedispl[nodereduceoutdispl[numproc]]);
-  cudaMalloc((void**)&raypackmap_d,sizeof(int)*nodereduceoutdispl[numproc]*FFACTOR);
-  cudaMalloc((void**)&rayunpackmap_d,sizeof(int)*nodereduceincdispl[numproc]*FFACTOR);
+  cudaMalloc((void**)&nodereducedispl_d,sizeof(int)*(nodereduceoutdispl[numproc_data]+1));
+  cudaMalloc((void**)&nodereduceindex_d,sizeof(int)*nodereducedispl[nodereduceoutdispl[numproc_data]]);
+  cudaMalloc((void**)&raypackmap_d,sizeof(int)*nodereduceoutdispl[numproc_data]*FFACTOR);
+  cudaMalloc((void**)&rayunpackmap_d,sizeof(int)*nodereduceincdispl[numproc_data]*FFACTOR);
   cudaMalloc((void**)&noderaydispl_d,sizeof(int)*(mynumray+1));
   cudaMalloc((void**)&noderayindex_d,sizeof(int)*noderaydispl[mynumray]);
   cudaMemcpy(socketpackmap_d,socketpackmap,sizeof(int)*socketsendcommdispl[numproc_socket]*FFACTOR,cudaMemcpyHostToDevice);
   cudaMemcpy(socketunpackmap_d,socketunpackmap,sizeof(int)*socketrecvcommdispl[numproc_socket]*FFACTOR,cudaMemcpyHostToDevice);
-  cudaMemcpy(socketreducedispl_d,socketreducedispl,sizeof(int)*(socketreduceoutdispl[numproc]+1),cudaMemcpyHostToDevice);
-  cudaMemcpy(socketreduceindex_d,socketreduceindex,sizeof(int)*socketreducedispl[socketreduceoutdispl[numproc]],cudaMemcpyHostToDevice);
-  cudaMemcpy(nodepackmap_d,nodepackmap,sizeof(int)*socketreduceoutdispl[numproc]*FFACTOR,cudaMemcpyHostToDevice);
+  cudaMemcpy(socketreducedispl_d,socketreducedispl,sizeof(int)*(socketreduceoutdispl[numproc_data]+1),cudaMemcpyHostToDevice);
+  cudaMemcpy(socketreduceindex_d,socketreduceindex,sizeof(int)*socketreducedispl[socketreduceoutdispl[numproc_data]],cudaMemcpyHostToDevice);
+  cudaMemcpy(nodepackmap_d,nodepackmap,sizeof(int)*socketreduceoutdispl[numproc_data]*FFACTOR,cudaMemcpyHostToDevice);
   cudaMemcpy(nodeunpackmap_d,nodeunpackmap,sizeof(int)*noderecvcommdispl[numproc_node]*FFACTOR,cudaMemcpyHostToDevice);
-  cudaMemcpy(nodereducedispl_d,nodereducedispl,sizeof(int)*(nodereduceoutdispl[numproc]+1),cudaMemcpyHostToDevice);
-  cudaMemcpy(nodereduceindex_d,nodereduceindex,sizeof(int)*nodereducedispl[nodereduceoutdispl[numproc]],cudaMemcpyHostToDevice);
-  cudaMemcpy(raypackmap_d,raypackmap,sizeof(int)*nodereduceoutdispl[numproc]*FFACTOR,cudaMemcpyHostToDevice);
-  cudaMemcpy(rayunpackmap_d,rayunpackmap,sizeof(int)*nodereduceincdispl[numproc]*FFACTOR,cudaMemcpyHostToDevice);
+  cudaMemcpy(nodereducedispl_d,nodereducedispl,sizeof(int)*(nodereduceoutdispl[numproc_data]+1),cudaMemcpyHostToDevice);
+  cudaMemcpy(nodereduceindex_d,nodereduceindex,sizeof(int)*nodereducedispl[nodereduceoutdispl[numproc_data]],cudaMemcpyHostToDevice);
+  cudaMemcpy(raypackmap_d,raypackmap,sizeof(int)*nodereduceoutdispl[numproc_data]*FFACTOR,cudaMemcpyHostToDevice);
+  cudaMemcpy(rayunpackmap_d,rayunpackmap,sizeof(int)*nodereduceincdispl[numproc_data]*FFACTOR,cudaMemcpyHostToDevice);
   cudaMemcpy(noderaydispl_d,noderaydispl,sizeof(int)*(mynumray+1),cudaMemcpyHostToDevice);
   cudaMemcpy(noderayindex_d,noderayindex,sizeof(int)*noderaydispl[mynumray],cudaMemcpyHostToDevice);
 
   double gpumem = projmem+backmem;
-  double gpumems[numproc];
-  double batchmems[numproc];
-  double commems[numproc];
-  MPI_Allgather(&gpumem,1,MPI_DOUBLE,gpumems,1,MPI_DOUBLE,MPI_COMM_WORLD);
-  MPI_Allgather(&batchmem,1,MPI_DOUBLE,batchmems,1,MPI_DOUBLE,MPI_COMM_WORLD);
-  MPI_Allgather(&commem,1,MPI_DOUBLE,commems,1,MPI_DOUBLE,MPI_COMM_WORLD);
+  double gpumems[numproc_data];
+  double batchmems[numproc_data];
+  double commems[numproc_data];
+  MPI_Allgather(&gpumem,1,MPI_DOUBLE,gpumems,1,MPI_DOUBLE,MPI_COMM_DATA);
+  MPI_Allgather(&batchmem,1,MPI_DOUBLE,batchmems,1,MPI_DOUBLE,MPI_COMM_DATA);
+  MPI_Allgather(&commem,1,MPI_DOUBLE,commems,1,MPI_DOUBLE,MPI_COMM_DATA);
   if(myid==0){
     double gpumaxmem = 0.0;
     double batchmaxmem = 0.0;
@@ -404,7 +410,7 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
     double gputotmem = 0.0;
     double batchtotmem = 0.0;
     double commtotmem = 0.0;
-    for(int p = 0; p < numproc; p++){
+    for(int p = 0; p < numproc_data; p++){
       printf("PROC %d GPU MEMORY: %f GB + %f GB + %f GB = %f GB\n",p,gpumems[p],batchmems[p],commems[p],gpumems[p]+batchmems[p]+commems[p]);
       if(gpumems[p]>gpumaxmem)gpumaxmem=gpumems[p];
       if(batchmems[p]>batchmaxmem)batchmaxmem=batchmems[p];
@@ -421,8 +427,8 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
   cudaFuncSetAttribute(kernel_project,cudaFuncAttributeMaxDynamicSharedMemorySize,98304);
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
-  sendrequest = new MPI_Request[numproc];
-  recvrequest = new MPI_Request[numproc];
+  sendrequest = new MPI_Request[numproc_data];
+  recvrequest = new MPI_Request[numproc_data];
   socketstream = new cudaStream_t[numproc_socket];
   nodestream = new cudaStream_t[numproc_node];
   for(int p = 0; p < numproc_socket; p++)
@@ -433,56 +439,56 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
   communications();
 }
 
-void project(double *sino_d, double *tomo_d, double scale){
+void project(double *sino_d, double *tomo_d, double scale, int batchslice){
   cudaDeviceSynchronize();
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_DATA);
   double projecttime = MPI_Wtime();
   //PARTIAL PROJECTION
   kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d,mynumpix*FFACTOR,scale);
   partial_project();
-  for(int slice = 0; slice < batchsize; slice += FFACTOR){
+  for(int slice = 0; slice < batchslice; slice += FFACTOR){
     //MEMCPY DEVICE TO HOST
     cudaEventRecord(start);
-    cudaMemcpy(nodesendbuff_h,nodesendbuff_d,sizeof(COMMPREC)*nodereduceoutdispl[numproc]*FFACTOR,cudaMemcpyDeviceToHost);
+    cudaMemcpy(nodesendbuff_h,nodesendbuff_d,sizeof(COMMPREC)*nodereduceoutdispl[numproc_data]*FFACTOR,cudaMemcpyDeviceToHost);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
     pmtime += milliseconds/1e3;
     //HOST COMMUNICATION
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_DATA);
     double chtime = MPI_Wtime();
     {
       int recvcount = 0;
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         if(nodereduceout[p])
-          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+p);
-      for(int p = 0; p < numproc; p++)
+          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+p);
+      for(int p = 0; p < numproc_data; p++)
         if(nodereduceinc[p]){
-          MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+recvcount);
+          MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+recvcount);
           recvcount++;
         }
       #ifdef OVERLAP
       //PARTIAL PROJECTION
-      if(slice+FFACTOR < batchsize){
+      if(slice+FFACTOR < batchslice){
         kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d+(slice+FFACTOR)*mynumpix,mynumpix*FFACTOR,scale);
         partial_project();
       }
       #endif
       MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_DATA);
     pchtime += MPI_Wtime()-chtime;
     //if(myid==0)printf("rack time %e\n",MPI_Wtime()-chtime); 
     //MEMCPY HOST TO DEVICE
     cudaEventRecord(start);
-    cudaMemcpy(noderecvbuff_d,noderecvbuff_h,sizeof(COMMPREC)*nodereduceincdispl[numproc]*FFACTOR,cudaMemcpyHostToDevice);
+    cudaMemcpy(noderecvbuff_d,noderecvbuff_h,sizeof(COMMPREC)*nodereduceincdispl[numproc_data]*FFACTOR,cudaMemcpyHostToDevice);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
     pmtime += milliseconds/1e3;
     //HOST REDUCTION
     cudaEventRecord(start);
-    kernel_reducenopack<<<(mynumray+255)/256,256>>>(sino_d+slice*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d,1.0/scale);
+    kernel_reducenopack<<<(mynumray+255)/256,256>>>(sino_d+slice*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc_data],rayunpackmap_d,1.0/scale);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -491,99 +497,99 @@ void project(double *sino_d, double *tomo_d, double scale){
     numproj++;
     #ifndef OVERLAP
     //PARTIAL PROJECTION
-    if(slice+FFACTOR < batchsize){
+    if(slice+FFACTOR < batchslice){
       kernel_double2VECPREC<<<(mynumpix*FFACTOR+255)/256,256>>>(tomobuff_d,tomo_d+(slice+FFACTOR)*mynumpix,mynumpix*FFACTOR,scale);
       partial_project();
     }
     #endif
   }
   cudaDeviceSynchronize();
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_DATA);
   ptime += MPI_Wtime()-projecttime;
 }
 
 
-void backproject(double *tomo_d, double *sino_d, double scale){
+void backproject(double *tomo_d, double *sino_d, double scale, int batchslice){
   cudaDeviceSynchronize();
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_DATA);
   double backprojecttime = MPI_Wtime();
   //HOST SCATTER
   cudaEventRecord(start);
-  kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d,scale);
+  kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc_data],rayunpackmap_d,scale);
   cudaEventRecord(stop);
   cudaEventSynchronize(stop);
   cudaEventElapsedTime(&milliseconds,start,stop);
   brtime += milliseconds/1e3;
   //MEMCPY DEVICE TO HOST
   cudaEventRecord(start);
-  cudaMemcpy(noderecvbuff_h,noderecvbuff_d,sizeof(COMMPREC)*nodereduceincdispl[numproc]*FFACTOR,cudaMemcpyDeviceToHost);
+  cudaMemcpy(noderecvbuff_h,noderecvbuff_d,sizeof(COMMPREC)*nodereduceincdispl[numproc_data]*FFACTOR,cudaMemcpyDeviceToHost);
   cudaEventRecord(stop);
   cudaEventSynchronize(stop);
   cudaEventElapsedTime(&milliseconds,start,stop);
   bmtime += milliseconds/1e3;
   //HOST COMMUNICATION
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_DATA);
   double chtime = MPI_Wtime();
   {
     int sendcount = 0;
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       if(nodereduceout[p]){
-        MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+sendcount);
+        MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+sendcount);
         sendcount++;
       }
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       if(nodereduceinc[p])
-        MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+p);
+        MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+p);
     MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
   }
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_DATA);
   bchtime += MPI_Wtime()-chtime;
   //if(myid==0)printf("rack time %e\n",MPI_Wtime()-chtime);
   //MEMCPY HOST TO DEVICE
   cudaEventRecord(start);
-  cudaMemcpy(nodesendbuff_d,nodesendbuff_h,sizeof(COMMPREC)*nodereduceoutdispl[numproc]*FFACTOR,cudaMemcpyHostToDevice);
+  cudaMemcpy(nodesendbuff_d,nodesendbuff_h,sizeof(COMMPREC)*nodereduceoutdispl[numproc_data]*FFACTOR,cudaMemcpyHostToDevice);
   cudaEventRecord(stop);
   cudaEventSynchronize(stop);
   cudaEventElapsedTime(&milliseconds,start,stop);
   bmtime += milliseconds/1e3;
-  for(int slice = 0; slice < batchsize; slice += FFACTOR){
+  for(int slice = 0; slice < batchslice; slice += FFACTOR){
     double chtime;
     int sendcount = 0;
-    if(slice+FFACTOR < batchsize){
+    if(slice+FFACTOR < batchslice){
       //HOST SCATTER
       cudaEventRecord(start);
-      kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d+(slice+FFACTOR)*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc],rayunpackmap_d,scale);
+      kernel_scatternopack<<<(mynumray+255)/256,256>>>(sino_d+(slice+FFACTOR)*mynumray,noderecvbuff_d,noderaydispl_d,noderayindex_d,mynumray,nodereduceincdispl[numproc_data],rayunpackmap_d,scale);
       cudaEventRecord(stop);
       cudaEventSynchronize(stop);
       cudaEventElapsedTime(&milliseconds,start,stop);
       brtime += milliseconds/1e3;
       //MEMCPY DEVICE TO HOST
       cudaEventRecord(start);
-      cudaMemcpy(noderecvbuff_h,noderecvbuff_d,sizeof(COMMPREC)*nodereduceincdispl[numproc]*FFACTOR,cudaMemcpyDeviceToHost);
+      cudaMemcpy(noderecvbuff_h,noderecvbuff_d,sizeof(COMMPREC)*nodereduceincdispl[numproc_data]*FFACTOR,cudaMemcpyDeviceToHost);
       cudaEventRecord(stop);
       cudaEventSynchronize(stop);
       cudaEventElapsedTime(&milliseconds,start,stop);
       bmtime += milliseconds/1e3;
       //HOST COMMUNICATION
-      MPI_Barrier(MPI_COMM_WORLD);
+      MPI_Barrier(MPI_COMM_DATA);
       chtime = MPI_Wtime();
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         if(nodereduceout[p]){
-          MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,sendrequest+sendcount);
+          MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+sendcount);
           sendcount++;
         }
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         if(nodereduceinc[p])
-          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_WORLD,recvrequest+p);
+          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+p);
     }
     #ifdef OVERLAP
     //PARTIAL BACKPROJECTION
     partial_backproject();
     kernel_VECPREC2double<<<(mynumpix*FFACTOR+255)/256,256>>>(tomo_d+slice*mynumpix,tomobuff_d,mynumpix*FFACTOR,1.0/scale);
     #endif
-    if(slice+FFACTOR < batchsize){
+    if(slice+FFACTOR < batchslice){
       MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
-      MPI_Barrier(MPI_COMM_WORLD);
+      MPI_Barrier(MPI_COMM_DATA);
       bchtime += MPI_Wtime()-chtime;
       //if(myid==0)printf("rack time %e\n",MPI_Wtime()-chtime);
     }
@@ -593,10 +599,10 @@ void backproject(double *tomo_d, double *sino_d, double scale){
     kernel_VECPREC2double<<<(mynumpix*FFACTOR+255)/256,256>>>(tomo_d+slice*mynumpix,tomobuff_d,mynumpix*FFACTOR,1.0/scale);
     #endif
     numback++;
-    if(slice+FFACTOR < batchsize){
+    if(slice+FFACTOR < batchslice){
       //MEMCPY HOST TO DEVICE
       cudaEventRecord(start);
-      cudaMemcpy(nodesendbuff_d,nodesendbuff_h,sizeof(COMMPREC)*nodereduceoutdispl[numproc]*FFACTOR,cudaMemcpyHostToDevice);
+      cudaMemcpy(nodesendbuff_d,nodesendbuff_h,sizeof(COMMPREC)*nodereduceoutdispl[numproc_data]*FFACTOR,cudaMemcpyHostToDevice);
       cudaEventRecord(stop);
       cudaEventSynchronize(stop);
       cudaEventElapsedTime(&milliseconds,start,stop);
@@ -604,7 +610,7 @@ void backproject(double *tomo_d, double *sino_d, double scale){
     }
   }
   cudaDeviceSynchronize();
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_DATA);
   btime += MPI_Wtime()-backprojecttime;
 }
 
@@ -636,7 +642,7 @@ void partial_project(){
     //if(myid==0)printf("socket time %e\n",MPI_Wtime()-cstime);
     //SOCKET REDUCTION
     cudaEventRecord(start);
-    kernel_reduce<<<(socketreduceoutdispl[numproc]+255)/256,256>>>(nodereducesendbuff_d,socketreducerecvbuff_d,socketreducedispl_d,socketreduceindex_d,socketreduceoutdispl[numproc],socketrecvcommdispl[numproc_socket],nodepackmap_d,socketunpackmap_d);
+    kernel_reduce<<<(socketreduceoutdispl[numproc_data]+255)/256,256>>>(nodereducesendbuff_d,socketreducerecvbuff_d,socketreducedispl_d,socketreduceindex_d,socketreduceoutdispl[numproc_data],socketrecvcommdispl[numproc_socket],nodepackmap_d,socketunpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -653,7 +659,7 @@ void partial_project(){
     //if(myid==0)printf("node time %e\n",MPI_Wtime()-cntime);
     //NODE REDUCTION
     cudaEventRecord(start);
-    kernel_reduce<<<(nodereduceoutdispl[numproc]+255)/256,256>>>(nodesendbuff_d,nodereducerecvbuff_d,nodereducedispl_d,nodereduceindex_d,nodereduceoutdispl[numproc],noderecvcommdispl[numproc_node],raypackmap_d,nodeunpackmap_d);
+    kernel_reduce<<<(nodereduceoutdispl[numproc_data]+255)/256,256>>>(nodesendbuff_d,nodereducerecvbuff_d,nodereducedispl_d,nodereduceindex_d,nodereduceoutdispl[numproc_data],noderecvcommdispl[numproc_node],raypackmap_d,nodeunpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -664,7 +670,7 @@ void partial_project(){
 void partial_backproject(){
     //NODE SCATTER
     cudaEventRecord(start);
-    kernel_scatter<<<(nodereduceoutdispl[numproc]+255)/256,256>>>(nodesendbuff_d,nodereducerecvbuff_d,nodereducedispl_d,nodereduceindex_d,nodereduceoutdispl[numproc],noderecvcommdispl[numproc_node],raypackmap_d,nodeunpackmap_d);
+    kernel_scatter<<<(nodereduceoutdispl[numproc_data]+255)/256,256>>>(nodesendbuff_d,nodereducerecvbuff_d,nodereducedispl_d,nodereduceindex_d,nodereduceoutdispl[numproc_data],noderecvcommdispl[numproc_node],raypackmap_d,nodeunpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -681,7 +687,7 @@ void partial_backproject(){
     //if(myid==0)printf("node time %e\n",MPI_Wtime()-cntime);
     //SOCKET SCATTER
     cudaEventRecord(start);
-    kernel_scatter<<<(socketreduceoutdispl[numproc]+255)/256,256>>>(nodereducesendbuff_d,socketreducerecvbuff_d,socketreducedispl_d,socketreduceindex_d,socketreduceoutdispl[numproc],socketrecvcommdispl[numproc_socket],nodepackmap_d,socketunpackmap_d);
+    kernel_scatter<<<(socketreduceoutdispl[numproc_data]+255)/256,256>>>(nodereducesendbuff_d,socketreducerecvbuff_d,socketreducedispl_d,socketreduceindex_d,socketreduceoutdispl[numproc_data],socketrecvcommdispl[numproc_socket],nodepackmap_d,socketunpackmap_d);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds,start,stop);
@@ -895,7 +901,7 @@ double dot_kernel(double *a, double *b, int dim){
   double reduce = 0.0;
   for(int n = 0; n < numblocks; n++)
     reduce += reducebuff_h[n];
-  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_DATA);
   return reduce;
 };
 __global__ void kernel_max(double *a, int dim, double *buffer){
@@ -922,6 +928,6 @@ double max_kernel(double *a, int dim){
   for(int n = 0; n < numblocks; n++)
     if(reducebuff_h[n] > reduce)
       reduce = reducebuff_h[n];
-  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&reduce,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_DATA);
   return reduce;
 };

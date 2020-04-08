@@ -103,20 +103,28 @@ int *numrays;
 int *pixstart;
 int *raystart;
 
+extern int numthreads;
+extern int numproc;
+extern int myid;
+extern MPI_Comm MPI_COMM_BATCH;
+extern int numproc_batch;
+extern int myid_batch;
+extern MPI_Comm MPI_COMM_DATA;
+extern int numproc_data;
+extern int myid_data;
+extern MPI_Comm MPI_COMM_NODE;
+extern int numproc_node;
+extern int myid_node;
+extern int numnode;
+extern MPI_Comm MPI_COMM_SOCKET;
+extern int numproc_socket;
+extern int myid_socket;
+extern int numsocket;
+
 void preproc(){
-
-  int numproc;
-  int myid;
-  MPI_Comm_size(MPI_COMM_WORLD,&numproc);
-  MPI_Comm_rank(MPI_COMM_WORLD,&myid);
-
-  int numthreads;
-  #pragma omp parallel
-  if(omp_get_thread_num()==0)numthreads=omp_get_num_threads();
 
   MPI_Barrier(MPI_COMM_WORLD);
   double time = MPI_Wtime();
-
   if(myid==0)printf("PLACE TILES\n");
   //PLACE SPATIAL TILES
   int lspat = numxtile;
@@ -185,19 +193,19 @@ void preproc(){
     }
   delete[] speclltemp;
   if(myid==0)printf("MPI PARTITIONING\n");
-  int numspats[numproc];
-  int numspecs[numproc];
-  int spatstart[numproc];
-  int specstart[numproc];
-  numpixs = new int[numproc];
-  numrays = new int [numproc];
-  pixstart = new int[numproc];
-  raystart = new int[numproc];
-  int myspattemp = (numspattile/numproc)*numproc;
-  int myspectemp = (numspectile/numproc)*numproc;
-  for(int p = 0; p < numproc; p++){
-    numspats[p] = numspattile/numproc;
-    numspecs[p] = numspectile/numproc;
+  int numspats[numproc_data];
+  int numspecs[numproc_data];
+  int spatstart[numproc_data];
+  int specstart[numproc_data];
+  numpixs = new int[numproc_data];
+  numrays = new int [numproc_data];
+  pixstart = new int[numproc_data];
+  raystart = new int[numproc_data];
+  int myspattemp = (numspattile/numproc_data)*numproc_data;
+  int myspectemp = (numspectile/numproc_data)*numproc_data;
+  for(int p = 0; p < numproc_data; p++){
+    numspats[p] = numspattile/numproc_data;
+    numspecs[p] = numspectile/numproc_data;
     if(myspattemp < numspattile){
       numspats[p]++;
       myspattemp++;
@@ -209,37 +217,37 @@ void preproc(){
   }
   spatstart[0] = 0;
   specstart[0] = 0;
-  for(int p = 1; p < numproc; p++){
+  for(int p = 1; p < numproc_data; p++){
     spatstart[p] = spatstart[p-1] + numspats[p-1];
     specstart[p] = specstart[p-1] + numspecs[p-1];
   }
-  for(int p = 0; p < numproc; p++){
+  for(int p = 0; p < numproc_data; p++){
     numpixs[p] = numspats[p]*spatsize*spatsize;
     numrays[p] = numspecs[p]*specsize*specsize;
   }
   pixstart[0] = 0;
   raystart[0] = 0;
-  for(int p = 1; p < numproc; p++){
+  for(int p = 1; p < numproc_data; p++){
     pixstart[p] = pixstart[p-1] + numpixs[p-1];
     raystart[p] = raystart[p-1] + numrays[p-1];
   }
-  mynumpix = numpixs[myid];
-  mynumray = numrays[myid];
+  mynumpix = numpixs[myid_data];
+  mynumray = numrays[myid_data];
   int maxnumpix = numpixs[0];
   int maxnumray = numrays[0];
   int minnumpix = numpixs[0];
   int minnumray = numrays[0];
-  for(int p = 0; p < numproc; p++){
+  for(int p = 0; p < numproc_data; p++){
     if(numpixs[p]>maxnumpix)maxnumpix=numpixs[p];
     if(numrays[p]>maxnumray)maxnumray=numrays[p];
     if(numpixs[p]<minnumpix)minnumpix=numpixs[p];
     if(numrays[p]<minnumray)minnumray=numrays[p];
   }
   if(myid==0){
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       printf("proc: %d numspats: %d numpixs: %d (%d blocks) /  numspecs: %d numrays: %d (%d blocks)\n",p,numspats[p],numpixs[p],numpixs[p]/back_blocksize,numspecs[p],numrays[p],numrays[p]/proj_blocksize);
-    printf("minnumpix: %d maxnumpix: %d imbalance: %f\n",minnumpix,maxnumpix,maxnumpix/((double)(numpix)/numproc));
-    printf("minnumray: %d maxnumray: %d imbalance: %f\n",minnumray,maxnumray,maxnumray/((double)(numray)/numproc));
+    printf("minnumpix: %d maxnumpix: %d imbalance: %f\n",minnumpix,maxnumpix,maxnumpix/((double)(numpix)/numproc_data));
+    printf("minnumray: %d maxnumray: %d imbalance: %f\n",minnumray,maxnumray,maxnumray/((double)(numray)/numproc_data));
   }
   if(myid==0)printf("FILL PIXELS AND RAYS\n");
   //PLACE PIXELS
@@ -253,8 +261,8 @@ void preproc(){
     int pixlocy = pixloc/spatsize;
     int pixlocx = pixloc%spatsize;
     int  ind = tile*spatsize*spatsize + xy2d(spatsize,pixlocx,pixlocy);
-    double x = spatll[spatstart[myid]+tile].real()+0.5+pixlocx;
-    double y = spatll[spatstart[myid]+tile].imag()+0.5+pixlocy;
+    double x = spatll[spatstart[myid_data]+tile].real()+0.5+pixlocx;
+    double y = spatll[spatstart[myid_data]+tile].imag()+0.5+pixlocy;
     pixcoor[ind] = complex<double>(x,y);
     //GLOBAL SPATIAL INDEX (EXTENDED)
     int xglobalind = (int)(x-xstart);
@@ -282,8 +290,8 @@ void preproc(){
     int raylocthe = rayloc/specsize;
     int raylocrho = rayloc%specsize;
     int ind = tile*specsize*specsize + xy2d(specsize,raylocrho,raylocthe);
-    double rho = specll[specstart[myid]+tile].real()+0.5+raylocrho;
-    double the = specll[specstart[myid]+tile].imag()+raylocthe*M_PI/numt;
+    double rho = specll[specstart[myid_data]+tile].real()+0.5+raylocrho;
+    double the = specll[specstart[myid_data]+tile].imag()+raylocthe*M_PI/numt;
     //GLOBAL SPECTRAL INDEX (EXTENDED)
     int rhoglobalind = (int)((rho-rhostart));
     int theglobalind = (int)((the+(M_PI/numt)/2)/(M_PI/numt));
@@ -301,13 +309,13 @@ void preproc(){
   delete[] mestheta;
   delete[] specll;
   if(myid==0)printf("DOMAIN PARTITIONING\n");
-  rayrecvcount = new int[numproc];
-  raysendcount = new int[numproc];
-  rayrecvstart = new int[numproc];
-  raysendstart = new int[numproc];
+  rayrecvcount = new int[numproc_data];
+  raysendcount = new int[numproc_data];
+  rayrecvstart = new int[numproc_data];
+  raysendstart = new int[numproc_data];
   double *lengthtemp = new double[mynumray];
-  int *rayrecvtemp[numproc];
-  for(int p = 0; p < numproc; p++){
+  int *rayrecvtemp[numproc_data];
+  for(int p = 0; p < numproc_data; p++){
     #pragma omp parallel for
     for(int k = 0; k < mynumray; k++){
       lengthtemp[k] = 0;
@@ -339,56 +347,56 @@ void preproc(){
   }
   delete[] lengthtemp;
   //EXCHANGE SEND & RECV MAPS
-  MPI_Alltoall(rayrecvcount,1,MPI_INTEGER,raysendcount,1,MPI_INTEGER,MPI_COMM_WORLD);
+  MPI_Alltoall(rayrecvcount,1,MPI_INTEGER,raysendcount,1,MPI_INTEGER,MPI_COMM_DATA);
   rayrecvstart[0] = 0;
   raysendstart[0] = 0;
-  for(int p = 1; p < numproc; p++){
+  for(int p = 1; p < numproc_data; p++){
     rayrecvstart[p] = rayrecvstart[p-1] + rayrecvcount[p-1];
     raysendstart[p] = raysendstart[p-1] + raysendcount[p-1];
   }
-  raynuminc = rayrecvstart[numproc-1]+rayrecvcount[numproc-1];
-  raynumout = raysendstart[numproc-1]+raysendcount[numproc-1];
+  raynuminc = rayrecvstart[numproc_data-1]+rayrecvcount[numproc_data-1];
+  raynumout = raysendstart[numproc_data-1]+raysendcount[numproc_data-1];
   long raynumincall = raynuminc;
   raynumoutall = raynumout;
-  MPI_Allreduce(MPI_IN_PLACE,&raynumincall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE,&raynumoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-  int raynumouts[numproc];
-  int raynumincs[numproc];
-  MPI_Allgather(&raynumout,1,MPI_INT,raynumouts,1,MPI_INT,MPI_COMM_WORLD);
-  MPI_Allgather(&raynuminc,1,MPI_INT,raynumincs,1,MPI_INT,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&raynumincall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
+  MPI_Allreduce(MPI_IN_PLACE,&raynumoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
+  int raynumouts[numproc_data];
+  int raynumincs[numproc_data];
+  MPI_Allgather(&raynumout,1,MPI_INT,raynumouts,1,MPI_INT,MPI_COMM_DATA);
+  MPI_Allgather(&raynuminc,1,MPI_INT,raynumincs,1,MPI_INT,MPI_COMM_DATA);
   int raynumoutmin = raynumouts[0];
   int raynumoutmax = raynumouts[0];
   int raynumincmin = raynumincs[0];
   int raynumincmax = raynumincs[0];
-  for(int p = 0; p < numproc; p++){
+  for(int p = 0; p < numproc_data; p++){
     if(raynumoutmin>raynumouts[p])raynumoutmin=raynumouts[p];
     if(raynumoutmax<raynumouts[p])raynumoutmax=raynumouts[p];
     if(raynumincmin>raynumincs[p])raynumincmin=raynumincs[p];
     if(raynumincmax<raynumincs[p])raynumincmax=raynumincs[p];
   }
   if(myid==0){
-    printf("total outgoing rays: %ld %fx (%f blocks av. %f per proc)\n",raynumoutall,raynumoutall/(double)(numt*numr),raynumoutall/(double)proj_blocksize,raynumoutall/(double)proj_blocksize/numproc);
-    for(int p = 0; p < numproc; p++)
+    printf("total outgoing rays: %ld %fx (%f blocks av. %f per proc)\n",raynumoutall,raynumoutall/(double)(numt*numr),raynumoutall/(double)proj_blocksize,raynumoutall/(double)proj_blocksize/numproc_data);
+    for(int p = 0; p < numproc_data; p++)
       printf("proc: %d raynumout: %d (%d blocks) raynuminc: %d (%d blocks)\n",p,raynumouts[p],raynumouts[p]/proj_blocksize,raynumincs[p],raynumincs[p]/back_blocksize);
-    printf("raynumoutmin: %d raynumoutmax: %d imbalance: %f\n",raynumoutmin,raynumoutmax,raynumoutmax/((double)raynumoutall/numproc));
-    printf("raynumincmin: %d raynumincmax: %d imbalance: %f\n",raynumincmin,raynumincmax,raynumincmax/((double)raynumincall/numproc));
+    printf("raynumoutmin: %d raynumoutmax: %d imbalance: %f\n",raynumoutmin,raynumoutmax,raynumoutmax/((double)raynumoutall/numproc_data));
+    printf("raynumincmin: %d raynumincmax: %d imbalance: %f\n",raynumincmin,raynumincmax,raynumincmax/((double)raynumincall/numproc_data));
   }
   int *raysendlist = new int[raynumout];
   int *rayrecvlist = new int[raynuminc];
-  for(int p = 0; p < numproc; p++){
+  for(int p = 0; p < numproc_data; p++){
     #pragma omp parallel for
     for(int k = 0; k < rayrecvcount[p]; k++)
       rayrecvlist[rayrecvstart[p]+k] = rayrecvtemp[p][k];
     delete[] rayrecvtemp[p];
   }
-  MPI_Alltoallv(rayrecvlist,rayrecvcount,rayrecvstart,MPI_INTEGER,raysendlist,raysendcount,raysendstart,MPI_INTEGER,MPI_COMM_WORLD);
+  MPI_Alltoallv(rayrecvlist,rayrecvcount,rayrecvstart,MPI_INTEGER,raysendlist,raysendcount,raysendstart,MPI_INTEGER,MPI_COMM_DATA);
   //EXCHANGE RAY COORDINATES
   complex<double> *raycoorinc = new complex<double>[raynuminc];
   complex<double> *raycoorout = new complex<double>[raynumout];
   #pragma omp parallel for
   for(int k = 0; k < raynuminc; k++)
     raycoorinc[k] = raycoor[rayrecvlist[k]];
-  MPI_Alltoallv(raycoorinc,rayrecvcount,rayrecvstart,MPI_DOUBLE_COMPLEX,raycoorout,raysendcount,raysendstart,MPI_DOUBLE_COMPLEX,MPI_COMM_WORLD);
+  MPI_Alltoallv(raycoorinc,rayrecvcount,rayrecvstart,MPI_DOUBLE_COMPLEX,raycoorout,raysendcount,raysendstart,MPI_DOUBLE_COMPLEX,MPI_COMM_DATA);
   delete[] raycoor;
   //FIND RAY-TO-RAY MAPPING
   int *raynumray = new int[mynumray];
@@ -415,14 +423,14 @@ void preproc(){
   {
     extern int batchsize;
     int *pixobjinds;
-    if(myid == 0){
+    if(myid_data == 0){
       pixobjinds = new int[numpix];
       objglobalind = new long[(long)numx*numy*batchsize];
-      printf("OBJECT OUTPUTMAP: %ld (%f GB)\n",(long)numx*numy*batchsize,sizeof(long)*numx*numy*batchsize/1.0e9);
+      if(myid==0)printf("OBJECT OUTPUTMAP: %ld (%f GB)\n",(long)numx*numy*batchsize,sizeof(long)*numx*numy*batchsize/1.0e9);
     }
-    MPI_Gatherv(pixobjind,mynumpix,MPI_INT,pixobjinds,numpixs,pixstart,MPI_INT,0,MPI_COMM_WORLD);
-    if(myid==0){
-      for(int p = 0; p < numproc; p++)
+    MPI_Gatherv(pixobjind,mynumpix,MPI_INT,pixobjinds,numpixs,pixstart,MPI_INT,0,MPI_COMM_DATA);
+    if(myid_data==0){
+      for(int p = 0; p < numproc_data; p++)
         #pragma omp parallel for
         for(int n = 0; n < numpixs[p]; n++){
           int ind = pixobjinds[pixstart[p]+n];
@@ -434,14 +442,14 @@ void preproc(){
     }
     extern int batchsize;
     int *raymesinds;
-    if(myid == 0){
+    if(myid_data == 0){
       raymesinds = new int[numray];
       mesglobalind = new long[(long)numray*batchsize];
-      printf("MEASUREMENT INPUTMAP: %ld (%f GB)\n",(long)numray*batchsize,sizeof(long)*numray*batchsize/1.0e9);
+      if(myid==0)printf("MEASUREMENT INPUTMAP: %ld (%f GB)\n",(long)numray*batchsize,sizeof(long)*numray*batchsize/1.0e9);
     }
-    MPI_Gatherv(raymesind,mynumray,MPI_INT,raymesinds,numrays,raystart,MPI_INT,0,MPI_COMM_WORLD);
-    if(myid==0){
-      for(int p = 0; p < numproc; p++)
+    MPI_Gatherv(raymesind,mynumray,MPI_INT,raymesinds,numrays,raystart,MPI_INT,0,MPI_COMM_DATA);
+    if(myid_data == 0){
+      for(int p = 0; p < numproc_data; p++)
         #pragma omp parallel for
         for(int n = 0; n < numrays[p]; n++){
           int ind = raymesinds[raystart[p]+n];
@@ -457,8 +465,8 @@ void preproc(){
   }
     /*{
       int N = 1000000;
-      int *senddata = new int[N*numproc];
-      int *recvdata = new int[N*numproc];
+      int *senddata = new int[N*numproc_data];
+      int *recvdata = new int[N*numproc_data];
       {
         MPI_Barrier(MPI_COMM_WORLD);
         double time = MPI_Wtime();
@@ -493,7 +501,7 @@ void preproc(){
       double rho = raycoorout[k].real();
       double theta = raycoorout[k].imag();
       rownz[k] = 0;
-      for(int tile = spatstart[myid]; tile < spatstart[myid]+numspats[myid]; tile++){
+      for(int tile = spatstart[myid_data]; tile < spatstart[myid_data]+numspats[myid_data]; tile++){
         double domain[4];
         domain[0]=spatll[tile].real();
         domain[1]=domain[0]+spatsize;
@@ -512,20 +520,20 @@ void preproc(){
     delete[] rownz;
     long rownztot = rowdispl[raynumout];
     long rownzall = rownztot;
-    MPI_Allreduce(MPI_IN_PLACE,&rownzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    long *rownztots = new long[numproc];
-    MPI_Allgather(&rownztot,1,MPI_INT,rownztots,1,MPI_LONG,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&rownzall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
+    long *rownztots = new long[numproc_data];
+    MPI_Allgather(&rownztot,1,MPI_INT,rownztots,1,MPI_LONG,MPI_COMM_DATA);
     long rownztotmin = rownztots[0];
     long rownztotmax = rownztots[0];
-    for(int p = 0; p < numproc; p++){
+    for(int p = 0; p < numproc_data; p++){
       if(rownztotmin>rownztots[p])rownztotmin=rownztots[p];
       if(rownztotmax<rownztots[p])rownztotmax=rownztots[p];
     }
     if(myid==0){
       printf("CSR STORAGE: %ld (%f GB)\n",rownzall,rownzall*(sizeof(MATPREC)+sizeof(int))/1.0e9);
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         printf("proc: %d rownztot: %ld (%f GB)\n",p,rownztots[p],rownztots[p]/1.0e9*(sizeof(MATPREC)+sizeof(int)));
-        printf("rownztotmin: %ld rownztotmax: %ld imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc));
+        printf("rownztotmin: %ld rownztotmax: %ld imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc_data));
     }
     delete[] rownztots;
     int *rowindex = new int[rownztot];
@@ -534,7 +542,7 @@ void preproc(){
       double rho = raycoorout[k].real();
       double theta = raycoorout[k].imag();
       long start = rowdispl[k];
-      for(int tile = spatstart[myid]; tile < spatstart[myid]+numspats[myid]; tile++){
+      for(int tile = spatstart[myid_data]; tile < spatstart[myid_data]+numspats[myid_data]; tile++){
         double domain[4];
         domain[0]=spatll[tile].real();
         domain[1]=domain[0]+spatsize;
@@ -543,7 +551,7 @@ void preproc(){
         //REMOVE SPATIAL EDGE CONDITION
         if(domain[1] > xstart+numx)domain[1]=xstart+numx;
         if(domain[3] > ystart+numy)domain[3]=ystart+numy;
-        int offset = (tile-spatstart[myid])*spatsize*spatsize;
+        int offset = (tile-spatstart[myid_data])*spatsize*spatsize;
         int pixtemp = 0;
         findpixind(theta,rho,&domain[0],&pixtemp,offset,&rowindex[start]);
         start=start+pixtemp;
@@ -606,7 +614,7 @@ void preproc(){
     int numblocks = raynumout/blocksize;
     if(raynumout%blocksize)numblocks++;
     int numblocksall = numblocks;
-    MPI_Allreduce(MPI_IN_PLACE,&numblocksall,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&numblocksall,1,MPI_INT,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("TOTAL NUMBER OF BLOCKS: %d BUFFSIZE: %d (%f KB)\n",numblocksall,buffsize,buffsize*sizeof(VECPREC)/1.0e3);
     int *numbuff = new int[numblocks];
     #pragma omp parallel
@@ -639,7 +647,7 @@ void preproc(){
       if(numbuff[block]<numbuffmin)numbuffmin = numbuff[block];
     }
     long numbuffall = numbufftot;
-    MPI_Allreduce(MPI_IN_PLACE,&numbuffall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&numbuffall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("TOTAL NUMBER OF BUFFERS: %ld (%f PER BLOCK) MIN %d MAX %d BUFF PER BLOCK\n",numbuffall,numbuffall/(double)numblocksall,numbuffmin,numbuffmax);
     int *mapnz = new int[numbufftot];
     for(int n = 0; n < numbufftot; n++)
@@ -675,11 +683,11 @@ void preproc(){
     //delete[] mapnz;
     int mapnztot = mapdispl[numbufftot];
     long mapnzall = mapnztot;
-    MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("BUFF MAP: %ld (%f GB) DATA REUSE: %f\n",mapnzall,mapnzall/1.0e9*sizeof(int),proj_rownzall/(double)mapnzall);
     int numwarp = blocksize/WARPSIZE*numbufftot;
     long numwarpall = numwarp;
-    MPI_Allreduce(MPI_IN_PLACE,&numwarpall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&numwarpall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("TOTAL NUMBER OF WARPS: %ld (WARPSIZE %d)\n",numwarpall,WARPSIZE);
     int *buffmap = new int[mapnztot];
     int *warpnz = new int[numwarp];
@@ -732,20 +740,20 @@ void preproc(){
       warpdispl[warp] = warpdispl[warp-1]+warpnz[warp-1];
     int warpnztot = warpdispl[numwarp];
     long warpnzall = warpnztot;
-    MPI_Allreduce(MPI_IN_PLACE,&warpnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    int *warpnztots = new int[numproc];
-    MPI_Allgather(&warpnztot,1,MPI_INT,warpnztots,1,MPI_INT,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&warpnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
+    int *warpnztots = new int[numproc_data];
+    MPI_Allgather(&warpnztot,1,MPI_INT,warpnztots,1,MPI_INT,MPI_COMM_DATA);
     int warpnztotmin = warpnztots[0];
     int warpnztotmax = warpnztots[0];
-    for(int p = 0; p < numproc; p++){
+    for(int p = 0; p < numproc_data; p++){
       if(warpnztotmin>warpnztots[p])warpnztotmin=warpnztots[p];
       if(warpnztotmax<warpnztots[p])warpnztotmax=warpnztots[p];
     }
     if(myid==0){
       printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1.0e9,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
-      printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc));
+      printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc_data));
     }
     delete[] warpnztots;
     #ifdef MATRIX
@@ -838,7 +846,7 @@ void preproc(){
     int numblocks = mynumpix/blocksize;
     if(mynumpix%blocksize)numblocks++;
     int numblocksall = numblocks;
-    MPI_Allreduce(MPI_IN_PLACE,&numblocksall,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&numblocksall,1,MPI_INTEGER,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("TOTAL NUMBER OF BLOCKS: %d BUFFSIZE: %d (%f KB)\n",numblocksall,buffsize,buffsize*sizeof(VECPREC)/1.0e3);
     int *numbuff = new int[numblocks];
     #pragma omp parallel
@@ -871,7 +879,7 @@ void preproc(){
       if(numbuff[block]<numbuffmin)numbuffmin = numbuff[block];
     }
     long numbuffall = numbufftot;
-    MPI_Allreduce(MPI_IN_PLACE,&numbuffall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&numbuffall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("TOTAL NUMBER OF BUFFERS: %ld (%f PER BLOCK) MIN %d MAX %d BUFF PER BLOCK\n",numbuffall,numbuffall/(double)numblocksall,numbuffmin,numbuffmax);
     int *mapnz = new int[numbufftot];
     for(int n = 0; n < numbufftot; n++)
@@ -907,11 +915,11 @@ void preproc(){
     //delete[] mapnz;
     int mapnztot = mapdispl[numbufftot];
     long mapnzall = mapnztot;
-    MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&mapnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("BUFF MAP: %ld (%f GB) DATA REUSE: %f\n",mapnzall,mapnzall/1.0e9*sizeof(int),proj_rownzall/(double)mapnzall);
     int numwarp = blocksize/WARPSIZE*numbufftot;
     long numwarpall = numwarp;
-    MPI_Allreduce(MPI_IN_PLACE,&numwarpall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&numwarpall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("TOTAL NUMBER OF WARPS: %ld (WARPSIZE %d)\n",numwarpall,WARPSIZE);
     int *buffmap = new int[mapnztot];
     int *warpnz = new int[numwarp];
@@ -964,20 +972,20 @@ void preproc(){
       warpdispl[warp] = warpdispl[warp-1]+warpnz[warp-1];
     int warpnztot = warpdispl[numwarp];
     long warpnzall = warpnztot;
-    MPI_Allreduce(MPI_IN_PLACE,&warpnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
-    int *warpnztots = new int[numproc];
-    MPI_Allgather(&warpnztot,1,MPI_INT,warpnztots,1,MPI_INT,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&warpnzall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
+    int *warpnztots = new int[numproc_data];
+    MPI_Allgather(&warpnztot,1,MPI_INT,warpnztots,1,MPI_INT,MPI_COMM_DATA);
     int warpnztotmin = warpnztots[0];
     int warpnztotmax = warpnztots[0];
-    for(int p = 0; p < numproc; p++){
+    for(int p = 0; p < numproc_data; p++){
       if(warpnztotmin>warpnztots[p])warpnztotmin=warpnztots[p];
       if(warpnztotmax<warpnztots[p])warpnztotmax=warpnztots[p];
     }
     if(myid==0){
       printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1.0e9,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
-      for(int p = 0; p < numproc; p++)
+      for(int p = 0; p < numproc_data; p++)
         printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
-      printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc));
+      printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc_data));
     }
     delete[] warpnztots;
     #ifdef MATRIX
@@ -1175,7 +1183,7 @@ void preproc(){
         if(reduce>rowmax)rowmax=reduce;
       }
     }
-    MPI_Allreduce(MPI_IN_PLACE,&rowmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&rowmax,1,MPI_DOUBLE,MPI_MAX,MPI_COMM_DATA);
     if(myid==0)printf("rowmax: %e underflow: %d\n",rowmax,underflow);
     back_rowmax = rowmax;
   }

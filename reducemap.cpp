@@ -53,14 +53,20 @@ int *rayunpackmap;
 extern int numthreads;
 extern int numproc;
 extern int myid;
-extern MPI_Comm MPI_COMM_SOCKET;
-extern int numproc_socket;
-extern int myid_socket;
-extern int numsocket;
+extern MPI_Comm MPI_COMM_BATCH;
+extern int numproc_batch;
+extern int myid_batch;
+extern MPI_Comm MPI_COMM_DATA;
+extern int numproc_data;
+extern int myid_data;
 extern MPI_Comm MPI_COMM_NODE;
 extern int numproc_node;
 extern int myid_node;
 extern int numnode;
+extern MPI_Comm MPI_COMM_SOCKET;
+extern int numproc_socket;
+extern int myid_socket;
+extern int numsocket;
 
 void reducemap(){
   //SOCKET REDUCTION MAPS
@@ -93,7 +99,7 @@ void reducemap(){
       socketrayinc[socket] = 0;
     }
     socketrayoutall = socketrayincdispl[numsocket];
-    MPI_Allreduce(MPI_IN_PLACE,&socketrayoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&socketrayoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("ALL COMMUNICATION: %ld (%f MB)\n",raynumoutall,raynumoutall*sizeof(COMMPREC)/1.0e6);
     if(myid==0)printf("INTER-SOCKET COMM: %ld (%f MB) %f%% saving\n",socketrayoutall,socketrayoutall*sizeof(COMMPREC)/1.0e6,(raynumoutall-socketrayoutall)/(double)raynumoutall*100);
     for(int m = 0; m < mynumray; m++){
@@ -168,9 +174,9 @@ void reducemap(){
     delete[] socketinvmap;
     delete[] socketraynz;
     //FIND SOCKET REDUCTION MAPPING SENDING SIDE
-    socketreduceout = new int[numproc];
+    socketreduceout = new int[numproc_data];
     #pragma omp parallel for
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       socketreduceout[p] = 0;
     #pragma omp parallel for
     for(int socket = 0; socket < numsocket; socket++)
@@ -186,12 +192,12 @@ void reducemap(){
         }
       }
     }*/
-    socketreduceoutdispl = new int[numproc+1];
+    socketreduceoutdispl = new int[numproc_data+1];
     socketreduceoutdispl[0] = 0;
-    for(int p = 1; p < numproc+1; p++)
+    for(int p = 1; p < numproc_data+1; p++)
       socketreduceoutdispl[p] = socketreduceoutdispl[p-1] + socketreduceout[p-1];
-    int **socketreducedispltemp = new int*[numproc];
-    int **socketreduceindextemp = new int*[numproc];
+    int **socketreducedispltemp = new int*[numproc_data];
+    int **socketreduceindextemp = new int*[numproc_data];
     #pragma omp parallel for
     for(int socket = 0; socket < numsocket; socket++){
       for(int p = socket*numproc_socket; p < (socket+1)*numproc_socket; p++){
@@ -208,33 +214,33 @@ void reducemap(){
       delete[] socketdispl[socket];
       delete[] socketindex[socket];
     }
-    MPI_Request sendrequest[numproc];
-    MPI_Request recvrequest[numproc];
+    MPI_Request sendrequest[numproc_data];
+    MPI_Request recvrequest[numproc_data];
     socketreduceinc = socketreduceout;
     socketreduceincdispl = socketreduceoutdispl;
-    socketreduceout = new int[numproc];
-    socketreduceoutdispl = new int[numproc+1];
-    MPI_Alltoall(socketreduceinc,1,MPI_INT,socketreduceout,1,MPI_INT,MPI_COMM_WORLD);
+    socketreduceout = new int[numproc_data];
+    socketreduceoutdispl = new int[numproc_data+1];
+    MPI_Alltoall(socketreduceinc,1,MPI_INT,socketreduceout,1,MPI_INT,MPI_COMM_DATA);
     socketreduceoutdispl[0] = 0;
-    for(int n = 1; n < numproc+1; n++)
+    for(int n = 1; n < numproc_data+1; n++)
       socketreduceoutdispl[n] = socketreduceoutdispl[n-1] + socketreduceout[n-1];
     int **displtemp = socketreducedispltemp;
     int **indextemp = socketreduceindextemp;
-    for(int p = 0; p < numproc; p++){
-      MPI_Isend(displtemp[p],socketreduceinc[p]+1,MPI_INT,p,0,MPI_COMM_WORLD,sendrequest+p);
-      MPI_Isend(indextemp[p],displtemp[p][socketreduceinc[p]],MPI_INT,p,1,MPI_COMM_WORLD,recvrequest+p);
+    for(int p = 0; p < numproc_data; p++){
+      MPI_Isend(displtemp[p],socketreduceinc[p]+1,MPI_INT,p,0,MPI_COMM_DATA,sendrequest+p);
+      MPI_Isend(indextemp[p],displtemp[p][socketreduceinc[p]],MPI_INT,p,1,MPI_COMM_DATA,recvrequest+p);
     }
-    socketreducedispltemp = new int*[numproc];
-    socketreduceindextemp = new int*[numproc];
-    for(int p = 0; p < numproc; p++){
+    socketreducedispltemp = new int*[numproc_data];
+    socketreduceindextemp = new int*[numproc_data];
+    for(int p = 0; p < numproc_data; p++){
       socketreducedispltemp[p] = new int[socketreduceout[p]+1];
-      MPI_Recv(socketreducedispltemp[p],socketreduceout[p]+1,MPI_INT,p,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      MPI_Recv(socketreducedispltemp[p],socketreduceout[p]+1,MPI_INT,p,0,MPI_COMM_DATA,MPI_STATUS_IGNORE);
       socketreduceindextemp[p] = new int[socketreducedispltemp[p][socketreduceout[p]]];
-      MPI_Recv(socketreduceindextemp[p],socketreducedispltemp[p][socketreduceout[p]],MPI_INT,p,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      MPI_Recv(socketreduceindextemp[p],socketreducedispltemp[p][socketreduceout[p]],MPI_INT,p,1,MPI_COMM_DATA,MPI_STATUS_IGNORE);
     }
-    MPI_Waitall(numproc,sendrequest,MPI_STATUSES_IGNORE);
-    MPI_Waitall(numproc,recvrequest,MPI_STATUSES_IGNORE);
-    for(int p = 0; p < numproc; p++){
+    MPI_Waitall(numproc_data,sendrequest,MPI_STATUSES_IGNORE);
+    MPI_Waitall(numproc_data,recvrequest,MPI_STATUSES_IGNORE);
+    for(int p = 0; p < numproc_data; p++){
       delete[] displtemp[p];
       delete[] indextemp[p];
     }
@@ -252,10 +258,10 @@ void reducemap(){
     for(int n = 0; n < raynumouts[myid_socket]; n++)
       socketindexmaptemp[n] = raynumoutdispl[myid_socket]+n;
     int *socketindexmap= new int[raynumoutdispl[numproc_socket]];
-    int reducebuffdispl[numproc+1];
+    int reducebuffdispl[numproc_data+1];
     int recvtemp = 0;
     reducebuffdispl[0] = 0;
-    for(int p = 0; p < numproc; p++){
+    for(int p = 0; p < numproc_data; p++){
       for(int precv = 0; precv < numproc_socket; precv++){
         MPI_Isend(&raysendcount[p],1,MPI_INT,precv,0,MPI_COMM_SOCKET,sendrequest+precv);
         MPI_Isend(socketindexmaptemp+raysendstart[p],raysendcount[p],MPI_INT,precv,1,MPI_COMM_SOCKET,recvrequest+precv);
@@ -271,17 +277,17 @@ void reducemap(){
     MPI_Waitall(numproc_socket,sendrequest,MPI_STATUSES_IGNORE);
     MPI_Waitall(numproc_socket,recvrequest,MPI_STATUSES_IGNORE);
     delete[] socketindexmaptemp;
-    socketreducedispl = new int[socketreduceoutdispl[numproc]+1];
+    socketreducedispl = new int[socketreduceoutdispl[numproc_data]+1];
     socketreducedispl[0] = 0;
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       for(int m = 0; m < socketreduceout[p]; m++){
         int ind = socketreduceoutdispl[p]+m;
         int nz = socketreducedispltemp[p][m+1]-socketreducedispltemp[p][m];
         socketreducedispl[ind+1] = socketreducedispl[ind]+nz;
       }
-    socketreduceindex = new int[socketreducedispl[socketreduceoutdispl[numproc]]];
+    socketreduceindex = new int[socketreducedispl[socketreduceoutdispl[numproc_data]]];
     #pragma omp parallel for
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       for(int m = 0; m < socketreduceout[p]; m++){
         for(int n = socketreducedispltemp[p][m]; n < socketreducedispltemp[p][m+1]; n++){
           int oldindex = socketindexmap[reducebuffdispl[p]+socketreduceindextemp[p][n]];
@@ -299,7 +305,7 @@ void reducemap(){
     #pragma omp parallel for
     for(int p = 0; p < numproc_socket; p++)
       socketrecvcomm[p] = 0;
-    for(int m = 0; m < socketreduceoutdispl[numproc]; m++)
+    for(int m = 0; m < socketreduceoutdispl[numproc_data]; m++)
       for(int n = socketreducedispl[m]; n < socketreducedispl[m+1]; n++)
         socketrecvcomm[socketrecvbufftag[socketreduceindex[n]]]++;
     socketrecvcommdispl = new int[numproc_socket+1];
@@ -310,7 +316,7 @@ void reducemap(){
     for(int n = 0; n < raynumoutdispl[numproc_socket]; n++)
       socketrecvbufftag[n] = -1;
     #pragma omp parallel for
-    for(int n = 0; n < socketreducedispl[socketreduceoutdispl[numproc]]; n++)
+    for(int n = 0; n < socketreducedispl[socketreduceoutdispl[numproc_data]]; n++)
       socketrecvbufftag[socketreduceindex[n]] = 0;
     int *socketrecvcommap[numproc_socket];
     #pragma omp parallel for
@@ -344,14 +350,14 @@ void reducemap(){
     for(int p = 0; p < numproc_socket; p++)
       delete[] socketrecvcommap[p];
     #pragma omp parallel for
-    for(int m = 0; m < socketreduceoutdispl[numproc]; m++)
+    for(int m = 0; m < socketreduceoutdispl[numproc_data]; m++)
       for(int n = socketreducedispl[m]; n < socketreducedispl[m+1]; n++)
         socketreduceindex[n] = socketrecvbufftag[socketreduceindex[n]];
     delete[] socketrecvbufftag;
   }
   //NODE REDUCTION MAPS
   {
-    int *nodemap = new int[socketreduceincdispl[numproc]];
+    int *nodemap = new int[socketreduceincdispl[numproc_data]];
     int noderayinc[numnode];
     #pragma omp parallel for
     for(int node = 0; node < numnode; node++){
@@ -379,7 +385,7 @@ void reducemap(){
       noderayinc[node] = 0;
     }
     noderayoutall = noderayincdispl[numnode];
-    MPI_Allreduce(MPI_IN_PLACE,&noderayoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,&noderayoutall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     if(myid==0)printf("  INTER-NODE COMM: %ld (%f MB) %f%% saving (%f%% additional saving)\n",noderayoutall,noderayoutall*sizeof(VECPREC)/1.0e6,(raynumoutall-noderayoutall)/(double)raynumoutall*100,(socketrayoutall-noderayoutall)/(double)socketrayoutall*100);
     for(int m = 0; m < mynumray; m++){
       int count[numnode];
@@ -420,7 +426,7 @@ void reducemap(){
     }
     delete[] nodemap;
     //FIND NODE REDUCTION MAPPING RECEIVING SIDE
-    int *noderaymap = new int[socketreduceincdispl[numproc]];
+    int *noderaymap = new int[socketreduceincdispl[numproc_data]];
     #pragma omp parallel for
     for(int m = 0; m < mynumray; m++)
       for(int n = socketraydispl[m]; n < socketraydispl[m+1]; n++)
@@ -453,9 +459,9 @@ void reducemap(){
     delete[] nodeinvmap;
     delete[] noderaynz;
     //FIND NODE REDUCTION MAPPING SENDING SIDE
-    nodereduceout = new int[numproc];
+    nodereduceout = new int[numproc_data];
     #pragma omp parallel for
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       nodereduceout[p] = 0;
     #pragma omp parallel for
     for(int node = 0; node < numnode; node++)
@@ -471,12 +477,12 @@ void reducemap(){
         }
       }
     }*/
-    nodereduceoutdispl = new int[numproc+1];
+    nodereduceoutdispl = new int[numproc_data+1];
     nodereduceoutdispl[0] = 0;
-    for(int p = 1; p < numproc+1; p++)
+    for(int p = 1; p < numproc_data+1; p++)
       nodereduceoutdispl[p] = nodereduceoutdispl[p-1] + nodereduceout[p-1];
-    int **nodereducedispltemp = new int*[numproc];
-    int **nodereduceindextemp = new int*[numproc];
+    int **nodereducedispltemp = new int*[numproc_data];
+    int **nodereduceindextemp = new int*[numproc_data];
     #pragma omp parallel for
     for(int node = 0; node < numnode; node++){
       for(int p = node*numproc_node; p < (node+1)*numproc_node; p++){
@@ -493,33 +499,33 @@ void reducemap(){
       delete[] nodedispl[node];
       delete[] nodeindex[node];
     }
-    MPI_Request sendrequest[numproc];
-    MPI_Request recvrequest[numproc];
+    MPI_Request sendrequest[numproc_data];
+    MPI_Request recvrequest[numproc_data];
     nodereduceinc = nodereduceout;
     nodereduceincdispl = nodereduceoutdispl;
-    nodereduceout = new int[numproc];
-    nodereduceoutdispl = new int[numproc+1];
-    MPI_Alltoall(nodereduceinc,1,MPI_INT,nodereduceout,1,MPI_INT,MPI_COMM_WORLD);
+    nodereduceout = new int[numproc_data];
+    nodereduceoutdispl = new int[numproc_data+1];
+    MPI_Alltoall(nodereduceinc,1,MPI_INT,nodereduceout,1,MPI_INT,MPI_COMM_DATA);
     nodereduceoutdispl[0] = 0;
-    for(int n = 1; n < numproc+1; n++)
+    for(int n = 1; n < numproc_data+1; n++)
       nodereduceoutdispl[n] = nodereduceoutdispl[n-1] + nodereduceout[n-1];
     int **displtemp = nodereducedispltemp;
     int **indextemp = nodereduceindextemp;
-    for(int p = 0; p < numproc; p++){
-      MPI_Isend(displtemp[p],nodereduceinc[p]+1,MPI_INT,p,0,MPI_COMM_WORLD,sendrequest+p);
-      MPI_Isend(indextemp[p],displtemp[p][nodereduceinc[p]],MPI_INT,p,1,MPI_COMM_WORLD,recvrequest+p);
+    for(int p = 0; p < numproc_data; p++){
+      MPI_Isend(displtemp[p],nodereduceinc[p]+1,MPI_INT,p,0,MPI_COMM_DATA,sendrequest+p);
+      MPI_Isend(indextemp[p],displtemp[p][nodereduceinc[p]],MPI_INT,p,1,MPI_COMM_DATA,recvrequest+p);
     }
-    nodereducedispltemp = new int*[numproc];
-    nodereduceindextemp = new int*[numproc];
-    for(int p = 0; p < numproc; p++){
+    nodereducedispltemp = new int*[numproc_data];
+    nodereduceindextemp = new int*[numproc_data];
+    for(int p = 0; p < numproc_data; p++){
       nodereducedispltemp[p] = new int[nodereduceout[p]+1];
-      MPI_Recv(nodereducedispltemp[p],nodereduceout[p]+1,MPI_INT,p,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      MPI_Recv(nodereducedispltemp[p],nodereduceout[p]+1,MPI_INT,p,0,MPI_COMM_DATA,MPI_STATUS_IGNORE);
       nodereduceindextemp[p] = new int[nodereducedispltemp[p][nodereduceout[p]]];
-      MPI_Recv(nodereduceindextemp[p],nodereducedispltemp[p][nodereduceout[p]],MPI_INT,p,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      MPI_Recv(nodereduceindextemp[p],nodereducedispltemp[p][nodereduceout[p]],MPI_INT,p,1,MPI_COMM_DATA,MPI_STATUS_IGNORE);
     }
-    MPI_Waitall(numproc,sendrequest,MPI_STATUSES_IGNORE);
-    MPI_Waitall(numproc,recvrequest,MPI_STATUSES_IGNORE);
-    for(int p = 0; p < numproc; p++){
+    MPI_Waitall(numproc_data,sendrequest,MPI_STATUSES_IGNORE);
+    MPI_Waitall(numproc_data,recvrequest,MPI_STATUSES_IGNORE);
+    for(int p = 0; p < numproc_data; p++){
       delete[] displtemp[p];
       delete[] indextemp[p];
     }
@@ -527,7 +533,7 @@ void reducemap(){
     delete[] indextemp;
     //RE-INDEX NODE SENDING SIDE
     int raynumouts[numproc_node];
-    MPI_Allgather(&socketreduceoutdispl[numproc],1,MPI_INT,raynumouts,1,MPI_INT,MPI_COMM_NODE);
+    MPI_Allgather(&socketreduceoutdispl[numproc_data],1,MPI_INT,raynumouts,1,MPI_INT,MPI_COMM_NODE);
     int raynumoutdispl[numproc_node+1];
     raynumoutdispl[0] = 0;
     for(int p = 1; p < numproc_node+1; p++)
@@ -537,10 +543,10 @@ void reducemap(){
     for(int n = 0; n < raynumouts[myid_node]; n++)
       nodeindexmaptemp[n] = raynumoutdispl[myid_node]+n;
     int *nodeindexmap= new int[raynumoutdispl[numproc_node]];
-    int reducebuffdispl[numproc+1];
+    int reducebuffdispl[numproc_data+1];
     int recvtemp = 0;
     reducebuffdispl[0] = 0;
-    for(int p = 0; p < numproc; p++){
+    for(int p = 0; p < numproc_data; p++){
       for(int precv = 0; precv < numproc_node; precv++){
         MPI_Isend(&socketreduceout[p],1,MPI_INT,precv,0,MPI_COMM_NODE,sendrequest+precv);
         MPI_Isend(nodeindexmaptemp+socketreduceoutdispl[p],socketreduceout[p],MPI_INT,precv,1,MPI_COMM_NODE,recvrequest+precv);
@@ -556,17 +562,17 @@ void reducemap(){
     MPI_Waitall(numproc_node,sendrequest,MPI_STATUSES_IGNORE);
     MPI_Waitall(numproc_node,recvrequest,MPI_STATUSES_IGNORE);
     delete[] nodeindexmaptemp;
-    nodereducedispl = new int[nodereduceoutdispl[numproc]+1];
+    nodereducedispl = new int[nodereduceoutdispl[numproc_data]+1];
     nodereducedispl[0] = 0;
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       for(int m = 0; m < nodereduceout[p]; m++){
         int ind = nodereduceoutdispl[p]+m;
         int nz = nodereducedispltemp[p][m+1]-nodereducedispltemp[p][m];
         nodereducedispl[ind+1] = nodereducedispl[ind]+nz;
       }
-    nodereduceindex = new int[nodereducedispl[nodereduceoutdispl[numproc]]];
+    nodereduceindex = new int[nodereducedispl[nodereduceoutdispl[numproc_data]]];
     #pragma omp parallel for
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       for(int m = 0; m < nodereduceout[p]; m++){
         for(int n = nodereducedispltemp[p][m]; n < nodereducedispltemp[p][m+1]; n++){
           int oldindex = nodeindexmap[reducebuffdispl[p]+nodereduceindextemp[p][n]];
@@ -584,7 +590,7 @@ void reducemap(){
     #pragma omp parallel for
     for(int p = 0; p < numproc_node; p++)
       noderecvcomm[p] = 0;
-    for(int m = 0; m < nodereduceoutdispl[numproc]; m++)
+    for(int m = 0; m < nodereduceoutdispl[numproc_data]; m++)
       for(int n = nodereducedispl[m]; n < nodereducedispl[m+1]; n++)
         noderecvcomm[noderecvbufftag[nodereduceindex[n]]]++;
     noderecvcommdispl = new int[numproc_node+1];
@@ -595,7 +601,7 @@ void reducemap(){
     for(int n = 0; n < raynumoutdispl[numproc_node]; n++)
       noderecvbufftag[n] = -1;
     #pragma omp parallel for
-    for(int n = 0; n < nodereducedispl[nodereduceoutdispl[numproc]]; n++)
+    for(int n = 0; n < nodereducedispl[nodereduceoutdispl[numproc_data]]; n++)
       noderecvbufftag[nodereduceindex[n]] = 0;
     int *noderecvcommap[numproc_node];
     #pragma omp parallel for
@@ -629,7 +635,7 @@ void reducemap(){
     for(int p = 0; p < numproc_node; p++)
       delete[] noderecvcommap[p];
     #pragma omp parallel for
-    for(int m = 0; m < nodereduceoutdispl[numproc]; m++)
+    for(int m = 0; m < nodereduceoutdispl[numproc_data]; m++)
       for(int n = nodereducedispl[m]; n < nodereducedispl[m+1]; n++)
         nodereduceindex[n] = noderecvbufftag[nodereduceindex[n]];
     delete[] noderecvbufftag;
@@ -671,22 +677,22 @@ void reducemap(){
           int ind = s*noderecvcommdispl[numproc_node]+noderecvcommdispl[p]+m;
           nodeunpackmap[ind] = index;
         }
-    raypackmap = new int[nodereduceoutdispl[numproc]*FFACTOR];
+    raypackmap = new int[nodereduceoutdispl[numproc_data]*FFACTOR];
     #pragma omp parallel for
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       for(int m = 0; m < nodereduceout[p]; m++)
         for(int s = 0; s < FFACTOR; s++){
-          int ind = s*nodereduceoutdispl[numproc]+nodereduceoutdispl[p]+m;
+          int ind = s*nodereduceoutdispl[numproc_data]+nodereduceoutdispl[p]+m;
           int index = nodereduceoutdispl[p]*FFACTOR+s*nodereduceout[p]+m;
           raypackmap[ind] = index;
         }
-    rayunpackmap = new int[nodereduceincdispl[numproc]*FFACTOR];
+    rayunpackmap = new int[nodereduceincdispl[numproc_data]*FFACTOR];
     #pragma omp parallel for
-    for(int p = 0; p < numproc; p++)
+    for(int p = 0; p < numproc_data; p++)
       for(int m = 0; m < nodereduceinc[p]; m++)
         for(int s = 0; s < FFACTOR; s++){
           int index = nodereduceincdispl[p]*FFACTOR+s*nodereduceinc[p]+m;
-          int ind = s*nodereduceincdispl[numproc]+nodereduceincdispl[p]+m;
+          int ind = s*nodereduceincdispl[numproc_data]+nodereduceincdispl[p]+m;
           rayunpackmap[ind] = index;
         }
   }

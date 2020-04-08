@@ -19,6 +19,7 @@ double bmtime = 0;
 double brtime = 0;
 double rtime = 0;
 double iotime = 0;
+double recontime = 0;
 int numproj = 0;
 int numback = 0;
 
@@ -30,6 +31,8 @@ int numslice; //NUMBER OF SLICES
 int startslice; //START SLICE INDEX 0 BASE
 int batchsize; //SLICE PER BATCH
 int numbatch; //NUMBER OF BATCHES
+int myslice;
+int mystartslice;
 
 double xstart; //X START OF DOMAIN
 double ystart; //Y START OF DOMAIN
@@ -66,14 +69,20 @@ int mynumpix;
 int numthreads;
 int numproc;
 int myid;
-MPI_Comm MPI_COMM_SOCKET;
-int numproc_socket;
-int myid_socket;
-int numsocket;
+MPI_Comm MPI_COMM_BATCH;
+int numproc_batch;
+int myid_batch;
+MPI_Comm MPI_COMM_DATA;
+int numproc_data;
+int myid_data;
 MPI_Comm MPI_COMM_NODE;
 int numproc_node;
 int myid_node;
 int numnode;
+MPI_Comm MPI_COMM_SOCKET;
+int numproc_socket;
+int myid_socket;
+int numsocket;
 
 int main(int argc, char** argv){
 
@@ -97,12 +106,14 @@ int main(int argc, char** argv){
   numx = numr;//atoi(chartemp);
   //chartemp = getenv("NUMY");
   numy = numx;//atoi(chartemp);
-  chartemp = getenv("NUMSLICE");
-  numslice = atoi(chartemp);
   chartemp = getenv("STARTSLICE");
   startslice = atoi(chartemp);
+  chartemp = getenv("NUMSLICE");
+  numslice = atoi(chartemp);
   chartemp = getenv("BATCHSIZE");
   batchsize = atoi(chartemp);
+  chartemp = getenv("BATCHPROC");
+  numproc_batch = atoi(chartemp);
 
   chartemp = getenv("PIXSIZE");
   pixsize = atof(chartemp);
@@ -155,43 +166,81 @@ int main(int argc, char** argv){
   else raylength = 2*numy;
   proj_buffsize = proj_buffsize*1024/sizeof(VECPREC);
   back_buffsize = back_buffsize*1024/sizeof(VECPREC);
-  numbatch = numslice/batchsize;
+
+  numproc_data = numproc/numproc_batch;
+  myid_batch = myid/numproc_data;
+  myid_data = myid%numproc_data;
+  if(numproc_data*numproc_batch!=numproc){
+    if(myid==0)printf("inconsistent number of procs\n");
+    return 0;
+  }
+  MPI_Comm_split(MPI_COMM_WORLD,myid_batch,myid,&MPI_COMM_DATA);
+  MPI_Comm_size(MPI_COMM_DATA,&numproc_data);
+  MPI_Comm_rank(MPI_COMM_DATA,&myid_data);
+  MPI_Comm_split(MPI_COMM_WORLD,myid_data,myid,&MPI_COMM_BATCH);
+  MPI_Comm_size(MPI_COMM_BATCH,&numproc_batch);
+  MPI_Comm_rank(MPI_COMM_BATCH,&myid_batch);
+
+  int myslices[numproc_batch];
+  int slicetemp = (numslice/numproc_batch)*numproc_batch;
+  for(int p = 0; p < numproc_batch; p++){
+    myslices[p] = numslice/numproc_batch;
+    if(slicetemp < numslice){
+      slicetemp++;
+      myslices[p]++;
+    }
+  }
+  myslice = myslices[myid_batch];
+  mystartslice = startslice;
+  for(int p = 0; p < myid_batch; p++)
+    mystartslice += myslices[p];
+  numbatch = myslice/batchsize;
+  if(myslice%batchsize)
+    numbatch++;
+
   //SOCKETS AND NODES
-  MPI_Comm_split(MPI_COMM_WORLD,myid/numproc_socket,myid,&MPI_COMM_SOCKET);
+  MPI_Comm_split(MPI_COMM_DATA,myid_data/numproc_socket,myid_data,&MPI_COMM_SOCKET);
   MPI_Comm_rank(MPI_COMM_SOCKET,&myid_socket);
   MPI_Comm_size(MPI_COMM_SOCKET,&numproc_socket);
-  numsocket = numproc/numproc_socket;
-  MPI_Comm_split(MPI_COMM_WORLD,myid/numproc_node,myid,&MPI_COMM_NODE);
+  numsocket = numproc_data/numproc_socket;
+  MPI_Comm_split(MPI_COMM_DATA,myid_data/numproc_node,myid_data,&MPI_COMM_NODE);
   MPI_Comm_rank(MPI_COMM_NODE,&myid_node);
   MPI_Comm_size(MPI_COMM_NODE,&numproc_node);
-  numnode = numproc/numproc_node;
+  numnode = numproc_data/numproc_node;
 
+  int myids_batch[numproc];
+  int myids_data[numproc];
   int myids_socket[numproc];
   int myids_node[numproc];
+  MPI_Allgather(&myid_batch,1,MPI_INT,myids_batch,1,MPI_INT,MPI_COMM_WORLD);
+  MPI_Allgather(&myid_data,1,MPI_INT,myids_data,1,MPI_INT,MPI_COMM_WORLD);
   MPI_Allgather(&myid_socket,1,MPI_INT,myids_socket,1,MPI_INT,MPI_COMM_WORLD);
   MPI_Allgather(&myid_node,1,MPI_INT,myids_node,1,MPI_INT,MPI_COMM_WORLD);
+  int myslicess[numproc];
+  int mystartss[numproc];
+  int mybatchss[numproc];
+  MPI_Allgather(&myslice,1,MPI_INT,myslicess,1,MPI_INT,MPI_COMM_WORLD);
+  MPI_Allgather(&mystartslice,1,MPI_INT,mystartss,1,MPI_INT,MPI_COMM_WORLD);
+  MPI_Allgather(&numbatch,1,MPI_INT,mybatchss,1,MPI_INT,MPI_COMM_WORLD);
   if(myid==0)
     for(int p = 0; p < numproc; p++)
-      printf("myid %d myid_socket %d myid_node %d\n",p,myids_socket[p],myids_node[p]);
-  int myidss_socket[numproc_socket];
-  int myidss_node[numproc_node];
-  MPI_Allgather(&myid,1,MPI_INT,myidss_socket,1,MPI_INT,MPI_COMM_SOCKET);
-  MPI_Allgather(&myid,1,MPI_INT,myidss_node,1,MPI_INT,MPI_COMM_NODE);
-  if(myid==0){
-    for(int p = 0; p < numproc_socket; p++)
-      printf("myid_socket %d myid %d\n",p,myidss_socket[p]);
-    for(int p = 0; p < numproc_node; p++)
-      printf("myid_node %d myid %d\n",p,myidss_node[p]);
-  }
+      printf("myid %d myid_batch %d/%d myid_data %d/%d myslice %d mystartslice %d mybatch %d myid_node %d/%d myid_socket %d/%d\n",p,myids_batch[p],numproc_batch,myids_data[p],numproc_data,myslicess[p],mystartss[p],mybatchss[p],myids_node[p],numproc_node,myids_socket[p],numproc_socket);
   
   //PRINT DATA
   if(myid==0){
     printf("  NUMBER OF RAYS (THE x RHO): %d (%d x %d)\n",numt*numr,numt,numr);
     printf("    NUMBER OF PIXELS (X x Y): %d (%d x %d)\n",numx*numy,numx,numy);
-    printf("         NUM. SLICES (B x S): %d (%d x %d)\n",numslice,numbatch,batchsize);
+    printf("                 NUM. SLICES: %d (%f PER BATCH PROCESS\n",numslice,numslice/(double)numproc_batch);
     printf("                 START SLICE: %d\n",startslice);
-    printf("                  BATCH SIZE: %d FUSE FACTOR %d\n",batchsize,FFACTOR);
+    printf("                  BATCH SIZE: %d (%f BATCHES PER PROCESS\n",batchsize,(numslice/(double)numproc_batch)/batchsize);
+    printf("                 FUSE FACTOR: %d (%f MINIBATCHES PER BATCH\n",FFACTOR,batchsize/(double)FFACTOR);
     printf("\n");
+  }
+  if(batchsize%FFACTOR!=0){
+    if(myid==0)printf("BATCHSIZE SHOULD BE A MULTIPLE OF FFACTOR!!!\n");
+    return 0;
+  }
+  if(myid==0){
     printf("     SPATIAL / SPECTRAL  TILE SIZE: %d (%d x %d) / %d (%d x %d)\n",spatsize*spatsize,spatsize,spatsize,specsize*specsize,specsize,specsize);
     printf("NUMBER OF SPATIAL / SPECTRAL TILES: %d (%d x %d) / %d (%d x %d)\n",numspattile,numxtile,numytile,numspectile,numttile,numrtile);
     printf("  NUMBER OF EXTENDED PIXELS / RAYS: %d (%d x %d) %f / %d (%d x %d) %f\n",numpix,numxtile*spatsize,numytile*spatsize,numpix/(double)(numx*numy),numray,numttile*specsize,numrtile*specsize,numray/(double)(numt*numr));
@@ -220,6 +269,7 @@ int main(int argc, char** argv){
     printf("   THETA FILE : %s\n",thefile);
     printf("  OUTPUT FILE : %s\n",outfile);
     printf("\n");
+    printf("NUMBER OF BATCH PROCS: %d DATA PROCS: %d\n",numproc_batch,numproc_data);
     printf("NUMBER OF PROCS PER SOCKET: %d PER NODE: %d\n",numproc_socket,numproc_node);
     printf("NUMBER OF NODES: %d SOCKETS: %d PROCS: %d\n",numnode,numsocket,numproc);
     printf("\n");
@@ -264,154 +314,168 @@ int main(int argc, char** argv){
   float *pixsendbuff = new float[mynumpix*batchsize];
   float *pixrecvbuff;
   float *objwritebuff;
-  if(myid == 0){
-    pixrecvbuff = new float[(long)numpix*batchsize];
-    objwritebuff = new float[(long)numx*numy*batchsize];
-    printf("\n");
-    printf("PIXRECVBUFF: %ld (%f GB)\n",(long)numpix*batchsize,sizeof(float)*numpix*batchsize/1.0e9);
-    printf("OBJWRITEBUFF: %ld (%f GB)\n",(long)numx*numy*batchsize,sizeof(float)*numx*numy*batchsize/1.0e9);
-  }
   float *raysendbuff;
   float *rayrecvbuff = new float[mynumray*batchsize];
   float *mesreadbuff;
-  if(myid == 0){
+  if(myid_data == 0){
+    pixrecvbuff = new float[(long)numpix*batchsize];
+    objwritebuff = new float[(long)numx*numy*batchsize];
     raysendbuff = new float[(long)numray*batchsize];
     mesreadbuff = new float[(long)numt*numr*batchsize];
+  }
+  if(myid==0){
+    printf("\n");
+    printf("PIXRECVBUFF: %ld (%f GB)\n",(long)numpix*batchsize,sizeof(float)*numpix*batchsize/1.0e9);
+    printf("OBJWRITEBUFF: %ld (%f GB)\n",(long)numx*numy*batchsize,sizeof(float)*numx*numy*batchsize/1.0e9);
     printf("RAYSENDBUFF: %ld (%f GB)\n",(long)numray*batchsize,sizeof(float)*numray*batchsize/1.0e9);
     printf("MESREADBUFF: %ld (%f GB)\n",(long)numt*numr*batchsize,sizeof(float)*numt*numr*batchsize/1.0e9);
+    printf("INPUT FILE: %s\n",sinfile);
+    printf("OUTPUT FILE: %s\n",outfile);
   }
-  if(myid==0)printf("INPUT FILE: %s\n",sinfile);
-  if(myid==0)printf("OUTPUT FILE: %s\n",outfile);
   FILE *inputf;
   FILE *outputf;
-  if(myid==0)inputf = fopen(sinfile,"rb");
-  if(myid==0)fseek(inputf,sizeof(float)*startslice*numr*numt,SEEK_SET);
-  if(myid==0)outputf = fopen(outfile,"wb");
+  char outfilebatch[1000];
+  sprintf(outfilebatch,"%s_%d",outfile,myid_batch);
+  if(myid_data==0){
+    inputf = fopen(sinfile,"rb");
+    fseek(inputf,sizeof(float)*mystartslice*numr*numt,SEEK_SET);
+    outputf = fopen(outfilebatch,"wb");
+  }
   if(myid==0)printf("\nCONJUGATE-GRADIENT OPTIMIZATION\n");
   MPI_Barrier(MPI_COMM_WORLD);
-  double time = 0;
-  rtime = MPI_Wtime();
+  recontime = MPI_Wtime();
   for(int batch = 0; batch < numbatch; batch++){
-    if(myid==0)printf("BATCH %d\n",batch);
+    int batchslice = batchsize;
+    if((batch+1)*batchsize > myslice)
+      batchslice = myslice%batchsize;
+    if(myid==0)printf("BATCH %d SIZE %d\n",batch,batchslice);
     //READ INPUT BATCH
-    MPI_Barrier(MPI_COMM_WORLD);
-    time = MPI_Wtime();
     {
+      MPI_Barrier(MPI_COMM_DATA);
+      double time = MPI_Wtime();
       extern int *numrays;
       extern int *raystart;
       extern long *mesglobalind;
-      MPI_Request sendrequest[numproc];
-      if(myid==0){
+      MPI_Request sendrequest[numproc_data];
+      if(myid_data==0){
         double readtime = MPI_Wtime();
-        fread(mesreadbuff,sizeof(float),(long)numr*numt*batchsize,inputf);
+        fread(mesreadbuff,sizeof(float),(long)numr*numt*batchslice,inputf);
         readtime = MPI_Wtime()-readtime;
-        printf("READ TIME %e s (%f GB/s)\n",readtime,sizeof(float)*numr*numt*batchsize/readtime/1.0e9);
+        if(myid==0)printf("READ TIME %e s (%f GB/s)\n",readtime,sizeof(float)*numr*numt*batchslice/readtime/1.0e9);
         #pragma omp parallel for
         for(long n = 0; n < (long)numray*batchsize; n++){
           long ind = mesglobalind[n];
           if(ind > -1)raysendbuff[n] = mesreadbuff[ind];
           else raysendbuff[n] = 0;
         }
-        for(int p = 0; p < numproc; p++)
-          MPI_Issend(raysendbuff+(long)raystart[p]*batchsize,numrays[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,sendrequest+p);
+        for(int p = 0; p < numproc_data; p++)
+          MPI_Issend(raysendbuff+(long)raystart[p]*batchsize,numrays[p]*batchslice,MPI_FLOAT,p,0,MPI_COMM_DATA,sendrequest+p);
       }
-      MPI_Recv(rayrecvbuff,mynumray*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+      MPI_Recv(rayrecvbuff,mynumray*batchslice,MPI_FLOAT,0,0,MPI_COMM_DATA,MPI_STATUS_IGNORE);
       #pragma omp parallel for
-      for(int n = 0; n < mynumray*batchsize; n++)
+      for(int n = 0; n < mynumray*batchslice; n++)
         res_h[n] = rayrecvbuff[n];
       //READ COMPLETE
-      copyH2D_kernel(res_d,res_h,mynumray*batchsize);
-      init_kernel(obj_d,mynumpix*batchsize);
+      copyH2D_kernel(res_d,res_h,mynumray*batchslice);
+      init_kernel(obj_d,mynumpix*batchslice);
+      MPI_Barrier(MPI_COMM_DATA);
+      iotime += MPI_Wtime()-time;
     }
-    MPI_Barrier(MPI_COMM_WORLD);
-    iotime += MPI_Wtime()-time;
     //FIND GRADIENT
-    double resnorm = dot_kernel(res_d,res_d,mynumray*batchsize);
+    double resnorm = dot_kernel(res_d,res_d,mynumray*batchslice);
     double mesnorm = resnorm;
-    double resmax = max_kernel(res_d,mynumray*batchsize);
+    double resmax = max_kernel(res_d,mynumray*batchslice);
     backscale = 64.0e3/(resmax*back_rowmax);
-    backproject(gra_d,res_d,backscale);
-    double gradnorm = dot_kernel(gra_d,gra_d,mynumpix*batchsize);
-    double dirmax = max_kernel(gra_d,mynumpix*batchsize);
+    backproject(gra_d,res_d,backscale,batchslice);
+    double gradnorm = dot_kernel(gra_d,gra_d,mynumpix*batchslice);
+    double dirmax = max_kernel(gra_d,mynumpix*batchslice);
     double objnorm = 0.0;
     if(myid==0)printf("iter: %d resnorm: %e relnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e\n",0,resnorm,1.0,resmax,dirmax,objnorm,backscale);
     //SAVE DIRECTION
     double oldgradnorm = gradnorm;
-    copyD2D_kernel(dir_d,gra_d,mynumpix*batchsize);
+    copyD2D_kernel(dir_d,gra_d,mynumpix*batchslice);
     //START ITERATIONS
     for(int iter = 1; iter <= numiter; iter++){
       //PROJECT DIRECTION
       projscale = 64.0e3/(dirmax*proj_rowmax);
-      project(ray_d,dir_d,projscale);
+      project(ray_d,dir_d,projscale,batchslice);
       //FIND STEP SIZE
-      double temp1 = dot_kernel(res_d,ray_d,mynumray*batchsize);
-      double temp2 = dot_kernel(ray_d,ray_d,mynumray*batchsize);
+      double temp1 = dot_kernel(res_d,ray_d,mynumray*batchslice);
+      double temp2 = dot_kernel(ray_d,ray_d,mynumray*batchslice);
       //STEP SIZE
       double alpha = temp1/temp2;
-      saxpy_kernel(obj_d,obj_d,alpha,dir_d,mynumpix*batchsize);
-      objnorm = dot_kernel(obj_d,obj_d,mynumpix*batchsize);
+      saxpy_kernel(obj_d,obj_d,alpha,dir_d,mynumpix*batchslice);
+      objnorm = dot_kernel(obj_d,obj_d,mynumpix*batchslice);
       //FIND RESIDUAL ERROR
-      saxpy_kernel(res_d,res_d,-alpha,ray_d,mynumray*batchsize);
-      resnorm = dot_kernel(res_d,res_d,mynumray*batchsize);
-      resmax = max_kernel(res_d,mynumray*batchsize);
+      saxpy_kernel(res_d,res_d,-alpha,ray_d,mynumray*batchslice);
+      resnorm = dot_kernel(res_d,res_d,mynumray*batchslice);
+      resmax = max_kernel(res_d,mynumray*batchslice);
       //FIND GRADIENT
       backscale = 64.0e3/(resmax*back_rowmax);
-      backproject(gra_d,res_d,backscale);
-      gradnorm = dot_kernel(gra_d,gra_d,mynumpix*batchsize);
+      backproject(gra_d,res_d,backscale,batchslice);
+      gradnorm = dot_kernel(gra_d,gra_d,mynumpix*batchslice);
       if(myid==0)printf("iter: %d resnorm: %e relnorm: %e resmax: %e dirmax: %e objnorm: %e bscale: %e pscale %e\n",iter,resnorm,resnorm/mesnorm,resmax,dirmax,objnorm,backscale,projscale);
       //UPDATE DIRECTION
       double beta = gradnorm/oldgradnorm;
       oldgradnorm = gradnorm;
-      saxpy_kernel(dir_d,gra_d,beta,dir_d,mynumpix*batchsize);
-      dirmax = max_kernel(dir_d,mynumpix*batchsize);
+      saxpy_kernel(dir_d,gra_d,beta,dir_d,mynumpix*batchslice);
+      dirmax = max_kernel(dir_d,mynumpix*batchslice);
     }
     //WRITE OUTPUT BATCH
-    MPI_Barrier(MPI_COMM_WORLD);
-    time = MPI_Wtime();
     {
+      MPI_Barrier(MPI_COMM_DATA);
+      double time = MPI_Wtime();
       extern int *numpixs;
       extern int *pixstart;
       extern long *objglobalind;
-      MPI_Request recvrequest[numproc];
-      copyD2H_kernel(obj_h,obj_d,mynumpix*batchsize);
+      MPI_Request recvrequest[numproc_data];
+      copyD2H_kernel(obj_h,obj_d,mynumpix*batchslice);
       #pragma omp parallel for
-      for(int n = 0; n < mynumpix*batchsize; n++)
+      for(int n = 0; n < mynumpix*batchslice; n++)
         pixsendbuff[n] = obj_h[n];
-      if(myid == 0)
-        for(int p = 0; p < numproc; p++)
-          MPI_Irecv(pixrecvbuff+(long)pixstart[p]*batchsize,numpixs[p]*batchsize,MPI_FLOAT,p,0,MPI_COMM_WORLD,recvrequest+p);
-      MPI_Ssend(pixsendbuff,mynumpix*batchsize,MPI_FLOAT,0,0,MPI_COMM_WORLD);
-      if(myid == 0){
-        MPI_Waitall(numproc,recvrequest,MPI_STATUSES_IGNORE);
+      if(myid_data == 0)
+        for(int p = 0; p < numproc_data; p++)
+          MPI_Irecv(pixrecvbuff+(long)pixstart[p]*batchsize,numpixs[p]*batchslice,MPI_FLOAT,p,0,MPI_COMM_DATA,recvrequest+p);
+      MPI_Ssend(pixsendbuff,mynumpix*batchslice,MPI_FLOAT,0,0,MPI_COMM_DATA);
+      if(myid_data == 0){
+        MPI_Waitall(numproc_data,recvrequest,MPI_STATUSES_IGNORE);
         #pragma omp parallel for
-        for(long n = 0; n < (long)numx*numy*batchsize; n++)
+        for(long n = 0; n < (long)numx*numy*batchslice; n++)
           objwritebuff[n] = pixrecvbuff[objglobalind[n]];
         double writetime = MPI_Wtime();
-        fwrite(objwritebuff,sizeof(float),(long)numx*numy*batchsize,outputf);
+        fwrite(objwritebuff,sizeof(float),(long)numx*numy*batchslice,outputf);
         writetime = MPI_Wtime()-writetime;
-        printf("WRITE TIME %e s (%f GB/s)\n",writetime,sizeof(float)*numx*numy*batchsize/writetime/1.0e9);
+        if(myid==0)printf("WRITE TIME %e s (%f GB/s)\n",writetime,sizeof(float)*numx*numy*batchslice/writetime/1.0e9);
       }
+      MPI_Barrier(MPI_COMM_DATA);
+      iotime += MPI_Wtime()-time;
     }
-    MPI_Barrier(MPI_COMM_WORLD);
-    iotime += MPI_Wtime()-time;
   }
-  rtime = MPI_Wtime()-rtime;
-  if(myid==0)fclose(inputf);
-  if(myid==0)fclose(outputf);
+  rtime = MPI_Wtime()-recontime;
+  if(myid_data==0)fclose(inputf);
+  if(myid_data==0)fclose(outputf);
+  MPI_Barrier(MPI_COMM_WORLD);
+  recontime = MPI_Wtime()-recontime;
 
+  MPI_Allreduce(MPI_IN_PLACE,&rtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&ptime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&btime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&iotime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&recontime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   if(myid==0){
     double cgtime = rtime-ptime-btime-iotime;
+    double othertime = recontime-rtime;
     printf("\n");
-    printf("recon: %e proj %e back %e cg %e i/o %e\n",rtime,ptime,btime,cgtime,iotime);
+    printf("recontime: %e recon: %e proj %e back %e cg %e i/o %e other %e\n",recontime/numproc,rtime/numproc,ptime/numproc,btime/numproc,cgtime/numproc,iotime/numproc,othertime/numproc);
   }
-  MPI_Allreduce(MPI_IN_PLACE,&ptime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,&numproj,1,MPI_INT,MPI_SUM,MPI_COMM_BATCH);
+  MPI_Allreduce(MPI_IN_PLACE,&numback,1,MPI_INT,MPI_SUM,MPI_COMM_BATCH);
   MPI_Allreduce(MPI_IN_PLACE,&pktime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&pcstime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&pcntime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&pcrtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&pchtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&pmtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE,&btime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bktime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bcstime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bcntime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
@@ -419,6 +483,7 @@ int main(int argc, char** argv){
   MPI_Allreduce(MPI_IN_PLACE,&bchtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&bmtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   if(myid==0){
+    printf("\nNUMBER OF TOTAL PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
     extern long proj_rownzall;
     extern long proj_warpnzall;
     extern long proj_mapnzall;
@@ -429,9 +494,8 @@ int main(int argc, char** argv){
     extern long noderayoutall;
     double pother = ptime-prtime-pktime-pmtime-pcstime-pcntime-pcrtime-pchtime;
     double bother = btime-brtime-bktime-bmtime-bcstime-bcntime-bcrtime-bchtime;
-    printf("AGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pcstime,pcntime,pchtime,pmtime,prtime,pother,btime,bktime,bcstime,bcntime,bchtime,bmtime,brtime,bother);
+    printf("\nAGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pcstime,pcntime,pchtime,pmtime,prtime,pother,btime,bktime,bcstime,bcntime,bchtime,bmtime,brtime,bother);
     printf("AGGREGATE total %e ( %e %e %e %e %e %e %e )\n",ptime+btime,pktime+bktime,pcstime+bcstime,pcntime+bcntime,pchtime+bchtime,pmtime+bmtime,prtime+brtime,pother+bother);
-    printf("NUMBER OF PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
     double projflop = proj_rownzall/1.0e9*2*(numiter)*numslice;
     double backflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
     double flop = projflop+backflop;

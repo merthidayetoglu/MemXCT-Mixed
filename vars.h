@@ -9,11 +9,11 @@
 //#define OVERLAP //OVERLAP COMMUNICATIONS ON
 #define FFACTOR 16 //FUSING FACTOR
 #define WARPSIZE 32 //WARPSIZE
-#define MATPREC float //MATRIX PRECISION
-#define VECPREC float //VECTOR PRECISION
-#define COMMPREC float //COMMUNICATION PRECISION
-//#define MATRIX //MATRIX STRUCTURE ON
-//#define MIXED //MIXED PRECISION ON
+#define MATPREC half //MATRIX PRECISION
+#define VECPREC half //VECTOR PRECISION
+#define COMMPREC half //COMMUNICATION PRECISION
+#define MATRIX //MATRIX STRUCTURE ON
+#define MIXED //MIXED PRECISION ON
 
 struct matrix{
   unsigned short ind;
@@ -30,15 +30,14 @@ void findnumpix(double,double,double*,int*);
 void findpixind(double,double,double*,int*,int,int*);
 void findlength(double,double,double*,double*);
 
-void project(double*,double*,double);
-void backproject(double*,double*,double);
+void project(double*,double*,double,int);
+void backproject(double*,double*,double,int);
 
 int encode(unsigned short, unsigned short);
 int xy2d (int n, int x, int y);
 void d2xy(int n, int d, int *x, int *y);
 
 void setup_gpu(double**,double**,double**,double**,double**,double**,double**);
-double norm_kernel(double*,int);
 double max_kernel(double*,int);
 double dot_kernel(double*,double*,int);
 void copyD2D_kernel(double*,double*,int);
