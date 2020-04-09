@@ -15,9 +15,9 @@ export NUMTHE=1501 #shale 1501 chip 1210 charcoal 4500 brain 4501
 export NUMRHO=2048 #shale 2048 chip 2448 charcoal 6613 brain 11283
 #DOMAIN SIZE
 export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
-export NUMSLICE=256 #shale 1792 chip 1024 charcoal 4198 brain 9209
-export BATCHSIZE=16 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
-export BATCHPROC=1
+export NUMSLICE=64 #shale 1792 chip 1024 charcoal 4198 brain 9209
+export BATCHSIZE=64 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
+export BATCHPROC=2
 #DOMAIN INFORMATION
 export PIXSIZE=1
 export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5 brain 5641.5
@@ -65,9 +65,9 @@ export PROCPERSOCKET=3 #PROCS PER SOCKET
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
 #jsrun --smpiargs="-gpu" -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-#jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info cuda-memcheck ./memxct
+jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
-#exit 1
+exit 1
 
 module load cuda
 cp var_mixed_ffactor16 vars.h
@@ -90,20 +90,30 @@ cp var_mixed_ffactor8 vars.h
 make clean
 make -j
 sleep 1
+export BATCHSIZE=8
 export BATCHPROC=32
 jsrun -n32 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 cp var_mixed_ffactor4 vars.h
 make clean
 make -j
 sleep 1
+export BATCHSIZE=4
 export BATCHPROC=64
 jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 cp var_mixed_ffactor2 vars.h
 make clean
 make -j
 sleep 1
+export BATCHSIZE=2
 export BATCHPROC=128
 jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_mixed_ffactor1 vars.h
+make clean
+make -j
+sleep 1
+export BATCHSIZE=1
+export BATCHPROC=256
+jsrun -n256 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 cp var_mixed_ffactor16 vars.h
 make clean

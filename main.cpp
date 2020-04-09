@@ -491,7 +491,7 @@ int main(int argc, char** argv){
   MPI_Allreduce(MPI_IN_PLACE,&bmtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE,&brtime,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
   if(myid==0){
-    printf("\nNUMBER OF TOTAL PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
+    printf("\nAGGREGATE PROJECTIONS %d BACKPROJECTIONS %d\n",numproj,numback);
     extern long proj_rownzall;
     extern long proj_warpnzall;
     extern long proj_mapnzall;
@@ -504,6 +504,8 @@ int main(int argc, char** argv){
     double bother = btime-brtime-bktime-bmtime-bcstime-bcntime-bcrtime-bchtime;
     printf("\nAGGREGATE proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime,pktime,pcstime,pcntime,pchtime,pmtime,prtime,pother,btime,bktime,bcstime,bcntime,bchtime,bmtime,brtime,bother);
     printf("AGGREGATE total %e ( %e %e %e %e %e %e %e )\n",ptime+btime,pktime+bktime,pcstime+bcstime,pcntime+bcntime,pchtime+bchtime,pmtime+bmtime,prtime+brtime,pother+bother);
+    printf("\nPERGPU proj %e ( %e %e %e %e %e %e %e ) back %e ( %e %e %e %e %e %e %e )\n",ptime/numproc,pktime/numproc,pcstime/numproc,pcntime/numproc,pchtime/numproc,pmtime/numproc,prtime/numproc,pother/numproc,btime/numproc,bktime/numproc,bcstime/numproc,bcntime/numproc,bchtime/numproc,bmtime/numproc,brtime/numproc,bother/numproc);
+    printf("PERGPU total %e ( %e %e %e %e %e %e %e )\n",(ptime+btime)/numproc,(pktime+bktime)/numproc,(pcstime+bcstime)/numproc,(pcntime+bcntime)/numproc,(pchtime+bchtime)/numproc,(pmtime+bmtime)/numproc,(prtime+brtime)/numproc,(pother+bother)/numproc);
     double projflop = proj_rownzall/1.0e9*2*(numiter)*numslice;
     double backflop = proj_rownzall/1.0e9*2*(numiter+1)*numslice;
     double flop = projflop+backflop;
@@ -580,13 +582,13 @@ int main(int argc, char** argv){
     double nodebwreal = nodedatareal/(pcntime+bcntime)*numproc;
     double hostbwreal = hostdatareal/(pchtime+bchtime)*numproc;
     printf("AGGREGATE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata,socketdata,socketdatareal,nodedata,nodedatareal,hostdata,hostdatareal);
-    printf("PERNODE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/numnode,socketdata/numnode,socketdatareal/numnode,nodedata/numnode,nodedatareal/numnode,hostdata/numnode,hostdatareal/numnode);
-    printf("PERSCKT MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/numsocket,socketdata/numsocket,socketdatareal/numsocket,nodedata/numsocket,nodedatareal/numsocket,hostdata/numsocket,hostdatareal/numsocket);
+    printf("PERNODE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/(numnode*numproc_batch),socketdata/(numnode*numproc_batch),socketdatareal/(numnode*numproc_batch),nodedata/(numnode*numproc_batch),nodedatareal/(numnode*numproc_batch),hostdata/(numnode*numproc_batch),hostdatareal/(numnode*numproc_batch));
+    printf("PERSCKT MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/(numsocket*numproc_batch),socketdata/(numsocket*numproc_batch),socketdatareal/(numsocket*numproc_batch),nodedata/(numsocket*numproc_batch),nodedatareal/(numsocket*numproc_batch),hostdata/(numsocket*numproc_batch),hostdatareal/(numsocket*numproc_batch));
     printf("PERGPU MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB\n",hostdata/numproc,socketdata/numproc,socketdatareal/numproc,nodedata/numproc,nodedatareal/numproc,hostdata/numproc,hostdatareal/numproc);
     printf("\n");
     printf("AGGREGATE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw,socketbw,socketbwreal,nodebw,nodebwreal,hostbw,hostbwreal);
-    printf("PERNODE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/numnode,socketbw/numnode,socketbwreal/numnode,nodebw/numnode,nodebwreal/numnode,hostbw/numnode,hostbwreal/numnode);
-    printf("PERSCKT MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/numsocket,socketbw/numsocket,socketbwreal/numsocket,nodebw/numsocket,nodebwreal/numsocket,hostbw/numsocket,hostbwreal/numsocket);
+    printf("PERNODE MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/(numnode*numproc_batch),socketbw/(numnode*numproc_batch),socketbwreal/(numnode*numproc_batch),nodebw/(numnode*numproc_batch),nodebwreal/(numnode*numproc_batch),hostbw/(numnode*numproc_batch),hostbwreal/(numnode*numproc_batch));
+    printf("PERSCKT MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/(numsocket*numproc_batch),socketbw/(numsocket*numproc_batch),socketbwreal/(numsocket*numproc_batch),nodebw/(numsocket*numproc_batch),nodebwreal/(numsocket*numproc_batch),hostbw/(numsocket*numproc_batch),hostbwreal/(numsocket*numproc_batch));
     printf("PERGPU MEMCPY %f SOCKET %f (%f) NODE %f (%f) HOST %f (%f) GB/s\n",memcpybw/numproc,socketbw/numproc,socketbwreal/numproc,nodebw/numproc,nodebwreal/numproc,hostbw/numproc,hostbwreal/numproc);
     printf("\n");
   }
