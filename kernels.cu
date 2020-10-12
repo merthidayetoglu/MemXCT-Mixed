@@ -733,6 +733,7 @@ __global__ void kernel_project(VECPREC *y, VECPREC *x, unsigned short *index, MA
     int mapoffset = mapdispl[buff];
     for(int i = threadIdx.x; i < mapnz[buff]; i += blockDim.x){
       int ind = buffmap[mapoffset+i];
+      #pragma unroll
       for(int f = 0; f < FFACTOR; f++)
         shared[f*buffsize+i] = x[f*numcol+ind];
     }
@@ -743,6 +744,7 @@ __global__ void kernel_project(VECPREC *y, VECPREC *x, unsigned short *index, MA
       matrix mat = indval[n*WARPSIZE+wind];
         #ifdef MIXED
       float val = mat.val;
+      #pragma unroll
       for(int f = 0; f < FFACTOR; f++)
         acc[f] += __half2float(shared[f*buffsize+mat.ind])*val;
         #else
@@ -752,6 +754,7 @@ __global__ void kernel_project(VECPREC *y, VECPREC *x, unsigned short *index, MA
       #else
       unsigned short ind = index[n*WARPSIZE+wind];
       MATPREC val = value[n*WARPSIZE+wind];
+      #pragma unroll
       for(int f = 0; f < FFACTOR; f++)
         acc[f] += shared[f*buffsize+ind]*val;
       #endif
@@ -798,7 +801,8 @@ __global__ void kernel_reducenopack(double *y, COMMPREC *x, int *displ, int *ind
         #ifdef MIXED
         reduce[f] += __half2float(x[unpackmap[f*numcol+ind]]);
         #else
-        reduce[f] += x[unpackmap[f*numcol+ind]];
+        //reduce[f] += x[unpackmap[f*numcol+ind]];
+        reduce[f] += x[f*numcol+ind];
         #endif
     }
     for(int f = 0; f < FFACTOR; f++)

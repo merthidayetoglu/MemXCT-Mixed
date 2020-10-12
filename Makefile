@@ -2,7 +2,7 @@
 
 CXX = mpicxx
 CXXFLAGS = -std=c++11 -qreport -qsmp=omp -qlistfmt=html
-OPTFLAGS = -O5 -qarch=pwr9 -qtune=pwr9 -qstrict -qsimd=auto
+OPTFLAGS = -O3 -qarch=pwr9 -qtune=pwr9 -qstrict -qsimd=auto
 
 NVCC = nvcc
 NVCCFLAGS = -lineinfo -O3 -std=c++11 -gencode arch=compute_70,code=sm_70 -ccbin=mpicxx -Xcompiler -qsmp=omp -Xptxas="-v"

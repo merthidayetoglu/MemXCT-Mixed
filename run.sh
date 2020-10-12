@@ -1,27 +1,29 @@
 #!/bin/bash
 
 #BSUB -P CSC362
-#BSUB -W 00:45
-#BSUB -nnodes 128
+#BSUB -W 00:30
+#BSUB -nnodes 4
 #BSUB -alloc_flags "gpudefault"
 #BUSB -env "all,LSF_CPU_ISOLATION=on"
-#BSUB -J strong128_shale
-#BSUB -o strong128_shale.%J
-#BSUB -e strong128_shale.%J
+#BSUB -J shale4_comm
+#BSUB -o shale4_comm.%J
+#BSUB -e shale4_comm.%J
 
 date
 
 export NUMTHE=1501 #shale 1501 chip 1210 charcoal 4500 brain 4501
 export NUMRHO=2048 #shale 2048 chip 2448 charcoal 6613 brain 11283
 #DOMAIN SIZE
-export STARTSLICE=896 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
-export NUMSLICE=64 #shale 1792 chip 1024 charcoal 4198 brain 9209
-export BATCHSIZE=64 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
+export STARTSLICE=0 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
+export NUMSLICE=1792 #shale 1792 chip 1024 charcoal 4198 brain 9209
 export BATCHPROC=2
+export BATCHSIZE=256 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
+export IOBATCHSIZE=8
 #DOMAIN INFORMATION
 export PIXSIZE=1
 export XSTART=-1024 #shale -1024 chip -1224 charcoal -3306.5 brain 5641.5
 export RHOSTART=-1024
+#chip -1208
 #charcoal     [0,997): -3316
 #          [997,1994): -3324
 #         [1994,2989): -3333
@@ -50,8 +52,8 @@ export BACKBUFF=96 #KB
 #export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/flatcorr_2x_extracted.9209s.sino.theta.data
 #export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.4198s.sino.spectral.data
 #export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00078_extracted.4198s.sino.theta.data
-export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.sino.spectral.data
-export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.sino.theta.data
+export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.spectral.data
+export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_00001_extracted.1792s.theta.data
 #export SINFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.spectral.data
 #export THEFILE=/gpfs/alpine/scratch/merth/csc362/MemXCT_datasets/tomo_chip_extracted.2048s.sino.theta.data
 export OUTFILE=/gpfs/alpine/scratch/merth/csc362/recon_shale.bin
@@ -65,10 +67,85 @@ export PROCPERSOCKET=3 #PROCS PER SOCKET
 #mv /gpfs/alpine/scratch/merth/csc362/profile/analysis_*.nvvp .
 
 #jsrun --smpiargs="-gpu" -n1 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n2 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 exit 1
 
+module load cuda
+echo DOUBLE PRECSISION PERFORMANCE
+export BATCHPROC=1
+cp var_double_ffactor1 vars.h
+make clean
+make -j
+export PROCPERNODE=1 #PROCS PER NODE
+export PROCPERSOCKET=1 #PROCS PER SOCKET
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_double_ffactor16 vars.h
+make clean
+make -j
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export PROCPERNODE=6 #PROCS PER NODE
+export PROCPERSOCKET=3 #PROCS PER SOCKET
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_double_ffactor16_overlapped vars.h
+make clean
+make -j
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+echo SINGLE PRECSISION PERFORMANCE
+export BATCHPROC=2
+cp var_float_ffactor1 vars.h
+make clean
+make -j
+export PROCPERNODE=1 #PROCS PER NODE
+export PROCPERSOCKET=1 #PROCS PER SOCKET
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_float_ffactor16 vars.h
+make clean
+make -j
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export PROCPERNODE=6 #PROCS PER NODE
+export PROCPERSOCKET=3 #PROCS PER SOCKET
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_float_ffactor16_overlapped vars.h
+make clean
+make -j
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+echo MIXED PRECSISION PERFORMANCE
+export BATCHPROC=4
+cp var_mixed_ffactor1 vars.h
+make clean
+make -j
+export PROCPERNODE=1 #PROCS PER NODE
+export PROCPERSOCKET=1 #PROCS PER SOCKET
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_mixed_ffactor16 vars.h
+make clean
+make -j
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export PROCPERNODE=6 #PROCS PER NODE
+export PROCPERSOCKET=3 #PROCS PER SOCKET
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+cp var_mixed_ffactor16_overlapped vars.h
+make clean
+make -j
+sleep 1
+jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+
+exit 1
+
+export NUMSLICE=128
+export BATCHSIZE=16
 module load cuda
 cp var_mixed_ffactor16 vars.h
 make clean
@@ -84,48 +161,48 @@ export BATCHPROC=4
 jsrun -n4 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 export BATCHPROC=8
 jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-export BATCHPROC=16
-jsrun -n16 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 cp var_mixed_ffactor8 vars.h
 make clean
 make -j
 sleep 1
 export BATCHSIZE=8
-export BATCHPROC=32
-jsrun -n32 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export BATCHPROC=16
+jsrun -n16 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 cp var_mixed_ffactor4 vars.h
 make clean
 make -j
 sleep 1
 export BATCHSIZE=4
-export BATCHPROC=64
-jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export BATCHPROC=32
+jsrun -n32 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 cp var_mixed_ffactor2 vars.h
 make clean
 make -j
 sleep 1
 export BATCHSIZE=2
-export BATCHPROC=128
-jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export BATCHPROC=64
+jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 cp var_mixed_ffactor1 vars.h
 make clean
 make -j
 sleep 1
 export BATCHSIZE=1
-export BATCHPROC=256
-jsrun -n256 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export BATCHPROC=128
+jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 cp var_mixed_ffactor16 vars.h
 make clean
 make -j
 sleep 1
-export BATCHPROC=16
+export BATCHSIZE=16
+export BATCHPROC=8
 export SPATSIZE=128
 export SPECSIZE=128
+jsrun -n16 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 jsrun -n32 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
-jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 export SPATSIZE=64
 export SPECSIZE=64
+jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 
 export BATCHPROC=1
@@ -140,6 +217,15 @@ export SPATSIZE=64
 export SPECSIZE=64
 jsrun -n8 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
 jsrun -n16 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export SPATSIZE=32
+export SPECSIZE=32
+jsrun -n32 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+jsrun -n64 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+export SPATSIZE=16
+export SPECSIZE=16
+jsrun -n128 -a6 -g6 -c42 -EOMP_NUM_THREADS=7 -r1  -bpacked:7 js_task_info ./memxct
+
+./run_brain.sh
 
 exit 1
 

@@ -44,7 +44,7 @@ extern int proj_buffsize;
 extern int back_blocksize;
 extern int back_buffsize;
 
-
+complex<double> *pixcoor;
 
 double proj_rowmax;
 long proj_rownztot;
@@ -251,10 +251,10 @@ void preproc(){
   }
   if(myid==0)printf("FILL PIXELS AND RAYS\n");
   //PLACE PIXELS
-  complex<double> *pixcoor = new complex<double>[mynumpix];
+  pixcoor = new complex<double>[mynumpix];
   pixglobalind = new int[mynumpix];
   pixobjind = new int[mynumpix];
-  #pragma omp parallel for
+  //#pragma omp parallel for
   for(int pix = 0; pix < mynumpix; pix++){
     int tile = pix/(spatsize*spatsize);
     int pixloc = pix%(spatsize*spatsize);
@@ -298,8 +298,8 @@ void preproc(){
     rayglobalind[ind] = theglobalind*numrtile*specsize+rhoglobalind;
     if(theglobalind < numt && rhoglobalind < numr){
       raymesind[ind] = theglobalind*numr+rhoglobalind;
-      raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
-      //raycoor[ind] = complex<double>(rho,the);
+      //raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
+      raycoor[ind] = complex<double>(rho,the);
     }
     else{
       raycoor[ind].real(5*raylength);
@@ -421,12 +421,12 @@ void preproc(){
   delete[] rayrecvlist;
   //OBJECT MAPPING
   {
-    extern int batchsize;
+    extern int iobatchsize;
     int *pixobjinds;
     if(myid_data == 0){
       pixobjinds = new int[numpix];
-      objglobalind = new long[(long)numx*numy*batchsize];
-      if(myid==0)printf("OBJECT OUTPUTMAP: %ld (%f GB)\n",(long)numx*numy*batchsize,sizeof(long)*numx*numy*batchsize/1.0e9);
+      objglobalind = new long[(long)numx*numy*iobatchsize];
+      if(myid==0)printf("OBJECT OUTPUTMAP: %ld (%f GB)\n",(long)numx*numy*iobatchsize,sizeof(long)*numx*numy*iobatchsize/1.0e9);
     }
     MPI_Gatherv(pixobjind,mynumpix,MPI_INT,pixobjinds,numpixs,pixstart,MPI_INT,0,MPI_COMM_DATA);
     if(myid_data==0){
@@ -435,17 +435,17 @@ void preproc(){
         for(int n = 0; n < numpixs[p]; n++){
           int ind = pixobjinds[pixstart[p]+n];
           if(ind > -1)
-            for(int slice = 0; slice < batchsize; slice++)
-              objglobalind[(long)slice*numx*numy+ind] = (long)batchsize*pixstart[p]+(long)slice*numpixs[p]+n;
+            for(int slice = 0; slice < iobatchsize; slice++)
+              objglobalind[(long)slice*numx*numy+ind] = (long)iobatchsize*pixstart[p]+(long)slice*numpixs[p]+n;
         }
       delete[] pixobjinds;
     }
-    extern int batchsize;
+    extern int iobatchsize;
     int *raymesinds;
     if(myid_data == 0){
       raymesinds = new int[numray];
-      mesglobalind = new long[(long)numray*batchsize];
-      if(myid==0)printf("MEASUREMENT INPUTMAP: %ld (%f GB)\n",(long)numray*batchsize,sizeof(long)*numray*batchsize/1.0e9);
+      mesglobalind = new long[(long)numray*iobatchsize];
+      if(myid==0)printf("MEASUREMENT INPUTMAP: %ld (%f GB)\n",(long)numray*iobatchsize,sizeof(long)*numray*iobatchsize/1.0e9);
     }
     MPI_Gatherv(raymesind,mynumray,MPI_INT,raymesinds,numrays,raystart,MPI_INT,0,MPI_COMM_DATA);
     if(myid_data == 0){
@@ -454,11 +454,11 @@ void preproc(){
         for(int n = 0; n < numrays[p]; n++){
           int ind = raymesinds[raystart[p]+n];
           if(ind > -1)
-            for(int slice = 0; slice < batchsize; slice++)
-              mesglobalind[(long)batchsize*raystart[p]+(long)slice*numrays[p]+n] = (long)slice*numr*numt+ind;
+            for(int slice = 0; slice < iobatchsize; slice++)
+              mesglobalind[(long)iobatchsize*raystart[p]+(long)slice*numrays[p]+n] = (long)slice*numr*numt+ind;
           else
-            for(int slice = 0; slice < batchsize; slice++)
-              mesglobalind[(long)batchsize*raystart[p]+(long)slice*numrays[p]+n] = -1;
+            for(int slice = 0; slice < iobatchsize; slice++)
+              mesglobalind[(long)iobatchsize*raystart[p]+(long)slice*numrays[p]+n] = -1;
         }
       delete[] raymesinds;
     }
@@ -1187,7 +1187,6 @@ void preproc(){
     if(myid==0)printf("rowmax: %e underflow: %d\n",rowmax,underflow);
     back_rowmax = rowmax;
   }
-  delete[] pixcoor;
   delete[] raycoorout;
   delete[] raycoorinc;
   MPI_Barrier(MPI_COMM_WORLD);
