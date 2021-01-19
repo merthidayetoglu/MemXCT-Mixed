@@ -92,6 +92,8 @@ int main(int argc, char** argv){
   MPI_Comm_size(MPI_COMM_WORLD,&numproc);
   MPI_Comm_rank(MPI_COMM_WORLD,&myid);
 
+  system("hostname");
+
   #pragma omp parallel
   if(omp_get_thread_num()==0)numthreads=omp_get_num_threads();
 
@@ -100,6 +102,7 @@ int main(int argc, char** argv){
 
   //SCANNING GEOMETRY DATA
   char *chartemp;
+  if(myid==0){
   chartemp = getenv("NUMTHE");
   numt = atoi(chartemp);
   chartemp = getenv("NUMRHO");
@@ -152,6 +155,50 @@ int main(int argc, char** argv){
   numproc_node = atoi(chartemp);
   chartemp = getenv("PROCPERSOCKET");
   numproc_socket= atoi(chartemp);
+  }
+  MPI_Bcast(&numt,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&numr,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&numx,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&numy,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&startslice,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&numslice,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&batchsize,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&numproc_batch,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&iobatchsize,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&pixsize,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+  MPI_Bcast(&xstart,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+  MPI_Bcast(&ystart,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+  MPI_Bcast(&rhostart,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+  MPI_Bcast(&numiter,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&spatsize,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&specsize,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&proj_blocksize,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&back_blocksize,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&proj_buffsize,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&back_buffsize,1,MPI_INT,0,MPI_COMM_WORLD);
+  {
+    int templength = 0;
+    if(myid==0)templength = strlen(sinfile)+1;
+    MPI_Bcast(&templength,1,MPI_INT,0,MPI_COMM_WORLD);
+    if(myid!=0)sinfile = new char[templength];
+    MPI_Bcast(sinfile,templength,MPI_CHAR,0,MPI_COMM_WORLD);
+  }
+  {
+    int templength = 0;
+    if(myid==0)templength = strlen(thefile)+1;
+    MPI_Bcast(&templength,1,MPI_INT,0,MPI_COMM_WORLD);
+    if(myid!=0)thefile = new char[templength];
+    MPI_Bcast(thefile,templength,MPI_CHAR,0,MPI_COMM_WORLD);
+  }
+  {
+    int templength = 0;
+    if(myid==0)templength = strlen(outfile)+1;
+    MPI_Bcast(&templength,1,MPI_INT,0,MPI_COMM_WORLD);
+    if(myid!=0)outfile = new char[templength];
+    MPI_Bcast(outfile,templength,MPI_CHAR,0,MPI_COMM_WORLD);
+  }
+  MPI_Bcast(&numproc_node,1,MPI_INT,0,MPI_COMM_WORLD);
+  MPI_Bcast(&numproc_socket,1,MPI_INT,0,MPI_COMM_WORLD);
 
   //FIND NUMBER OF TILES
   numxtile = numx/spatsize;
@@ -379,7 +426,6 @@ int main(int argc, char** argv){
     fclose(graf);
   }
   return 0;*/
-
 
   double backscale = 1.0;
   double projscale = 1.0;

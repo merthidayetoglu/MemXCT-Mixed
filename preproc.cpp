@@ -278,6 +278,9 @@ void preproc(){
   extern char *thefile;
   FILE *thetaf = fopen(thefile,"rb");
   fread(mestheta,sizeof(float),numt,thetaf);
+  /*if(myid==0)
+    for(int n = 0; n < numt; n++)
+      printf("%e degrees %d/%d\n",mestheta[n]/M_PI*180,n,numt);*/
   fclose(thetaf);
   //PLACE RAYS
   complex<double> *raycoor = new complex<double>[mynumray];
@@ -298,8 +301,8 @@ void preproc(){
     rayglobalind[ind] = theglobalind*numrtile*specsize+rhoglobalind;
     if(theglobalind < numt && rhoglobalind < numr){
       raymesind[ind] = theglobalind*numr+rhoglobalind;
-      //raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
-      raycoor[ind] = complex<double>(rho,the);
+      raycoor[ind] = complex<double>(rho,mestheta[theglobalind]);
+      //raycoor[ind] = complex<double>(rho,the);
     }
     else{
       raycoor[ind].real(5*raylength);
@@ -522,7 +525,7 @@ void preproc(){
     long rownzall = rownztot;
     MPI_Allreduce(MPI_IN_PLACE,&rownzall,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     long *rownztots = new long[numproc_data];
-    MPI_Allgather(&rownztot,1,MPI_INT,rownztots,1,MPI_LONG,MPI_COMM_DATA);
+    MPI_Allgather(&rownztot,1,MPI_LONG,rownztots,1,MPI_LONG,MPI_COMM_DATA);
     long rownztotmin = rownztots[0];
     long rownztotmax = rownztots[0];
     for(int p = 0; p < numproc_data; p++){
@@ -533,7 +536,7 @@ void preproc(){
       printf("CSR STORAGE: %ld (%f GB)\n",rownzall,rownzall*(sizeof(MATPREC)+sizeof(int))/1.0e9);
       for(int p = 0; p < numproc_data; p++)
         printf("proc: %d rownztot: %ld (%f GB)\n",p,rownztots[p],rownztots[p]/1.0e9*(sizeof(MATPREC)+sizeof(int)));
-        printf("rownztotmin: %ld rownztotmax: %ld imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc_data));
+      printf("rownztotmin: %ld rownztotmax: %ld imbalance: %f\n",rownztotmin,rownztotmax,rownztotmax/((double)rownzall/numproc_data));
     }
     delete[] rownztots;
     int *rowindex = new int[rownztot];
@@ -562,6 +565,21 @@ void preproc(){
     proj_rowdispl = rowdispl;
     proj_rowindex = rowindex;
   }
+      /*float *tempval = new float[proj_rowdispl[raynumout]];
+      #pragma omp parallel for
+      for(int n = 0; n < proj_rowdispl[raynumout]; n++)
+        tempval[n] = 1.0;
+      int *tempdispl = new int[raynumout+1];
+      #pragma omp parallel for
+      for(int n = 0; n < raynumout+1; n++)
+        tempdispl[n] = proj_rowdispl[n];
+      FILE *matf = fopen("XCT_ADS3_Hilbert.bin","wb");
+      fwrite(tempdispl,sizeof(int),raynumout+1,matf);
+      fwrite(proj_rowindex,sizeof(int),proj_rowdispl[raynumout],matf);
+      fwrite(tempval,sizeof(float),proj_rowdispl[raynumout],matf);
+      fclose(matf);
+      delete[] tempval;
+      delete[] tempdispl;*/
   MPI_Barrier(MPI_COMM_WORLD);
   if(myid==0)printf("RAY-TRACING TIME: %e\n",MPI_Wtime()-time);
   time = MPI_Wtime();
@@ -625,7 +643,7 @@ void preproc(){
         for(int n = 0; n < mynumpix; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < raynumout; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < mynumpix; n++)
@@ -660,7 +678,7 @@ void preproc(){
         for(int n = 0; n < mynumpix; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < raynumout; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < mynumpix; n++)
@@ -703,7 +721,7 @@ void preproc(){
         for(int n = 0; n < mynumpix; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < raynumout; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < mynumpix; n++)
@@ -717,7 +735,7 @@ void preproc(){
         for(int n = 0; n < blocksize*numbuff[block]; n++)
           indcount[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < raynumout; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             indcount[blocksize*numint[rowindex[n]]+m%blocksize]++;
         for(int buff = buffdispl[block]; buff < buffdispl[block+1]; buff++){
           int buffloc = buff-buffdispl[block];
@@ -752,18 +770,18 @@ void preproc(){
     if(myid==0){
       printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1.0e9,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
       for(int p = 0; p < numproc_data; p++)
-        printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
-      printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc_data));
+        printf("proc %d: warpnztot: %ld (%f GB)\n",p,warpnztots[p]*(long)WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
+      printf("warpnztotmin: %ld warpnztotmax: %ld imbalance: %f\n",warpnztotmin*(long)WARPSIZE,warpnztotmax*(long)WARPSIZE,warpnztotmax/((double)warpnzall/numproc_data));
     }
     delete[] warpnztots;
     #ifdef MATRIX
-    matrix *warpindval = new matrix[warpnztot*WARPSIZE];
+    matrix *warpindval = new matrix[warpnztot*(long)WARPSIZE];
     #else
-    unsigned short *warpindex = new unsigned short[warpnztot*WARPSIZE];
+    unsigned short *warpindex = new unsigned short[warpnztot*(long)WARPSIZE];
     #endif
-    bool *warpindextag = new bool[warpnztot*WARPSIZE];
+    bool *warpindextag = new bool[warpnztot*(long)WARPSIZE];
     #pragma omp parallel for
-    for(int n = 0; n < warpnztot*WARPSIZE; n++){
+    for(long n = 0; n < warpnztot*(long)WARPSIZE; n++){
       #ifdef MATRIX
       warpindval[n].ind = 0;
       #else
@@ -781,7 +799,7 @@ void preproc(){
         for(int n = 0; n < mynumpix; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < raynumout; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < mynumpix; n++)
@@ -794,12 +812,12 @@ void preproc(){
         for(int n = 0; n < blocksize*numbuff[block]; n++)
           indcount[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < raynumout; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++){
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++){
             int buffloc = numint[rowindex[n]];
             int *count = indcount+blocksize*buffloc;
             int indloc = m%blocksize;
             int warp = ((buffdispl[block]+buffloc)*blocksize+indloc)/WARPSIZE;
-            int ind = (warpdispl[warp]+count[indloc])*WARPSIZE+m%WARPSIZE;
+            long ind = (warpdispl[warp]+count[indloc])*(long)WARPSIZE+m%WARPSIZE;
             #ifdef MATRIX
             warpindval[ind].ind = numind[rowindex[n]];
             #else
@@ -857,7 +875,7 @@ void preproc(){
         for(int n = 0; n < raynumout; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < mynumpix; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < raynumout; n++)
@@ -892,7 +910,7 @@ void preproc(){
         for(int n = 0; n < raynumout; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < mynumpix; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < raynumout; n++)
@@ -935,7 +953,7 @@ void preproc(){
         for(int n = 0; n < raynumout; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < mynumpix; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < raynumout; n++)
@@ -949,7 +967,7 @@ void preproc(){
         for(int n = 0; n < blocksize*numbuff[block]; n++)
           indcount[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < mynumpix; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             indcount[blocksize*numint[rowindex[n]]+m%blocksize]++;
         for(int buff = buffdispl[block]; buff < buffdispl[block+1]; buff++){
           int buffloc = buff-buffdispl[block];
@@ -984,18 +1002,18 @@ void preproc(){
     if(myid==0){
       printf("WARP ELL NZ: %ld (%f GB) OVERHEAD: %f EFFICIENCY: %f\n",warpnzall*(long)WARPSIZE,warpnzall*(double)WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short))/1.0e9,warpnzall*(double)WARPSIZE/proj_rownzall,warpnzall*(double)WARPSIZE*0.75/proj_rownzall);
       for(int p = 0; p < numproc_data; p++)
-        printf("proc %d: warpnztot: %d (%f GB)\n",p,warpnztots[p]*WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
-      printf("warpnztotmin: %d warpnztotmax: %d imbalance: %f\n",warpnztotmin*WARPSIZE,warpnztotmax*WARPSIZE,warpnztotmax/((double)warpnzall/numproc_data));
+        printf("proc %d: warpnztot: %ld (%f GB)\n",p,warpnztots[p]*(long)WARPSIZE,warpnztots[p]/1.0e9*WARPSIZE*(sizeof(MATPREC)+sizeof(unsigned short)));
+      printf("warpnztotmin: %ld warpnztotmax: %ld imbalance: %f\n",warpnztotmin*(long)WARPSIZE,warpnztotmax*(long)WARPSIZE,warpnztotmax/((double)warpnzall/numproc_data));
     }
     delete[] warpnztots;
     #ifdef MATRIX
-    matrix *warpindval = new matrix[warpnztot*WARPSIZE];
+    matrix *warpindval = new matrix[warpnztot*(long)WARPSIZE];
     #else
-    unsigned short *warpindex = new unsigned short[warpnztot*WARPSIZE];
+    unsigned short *warpindex = new unsigned short[warpnztot*(long)WARPSIZE];
     #endif
-    bool *warpindextag = new bool[warpnztot*WARPSIZE];
+    bool *warpindextag = new bool[warpnztot*(long)WARPSIZE];
     #pragma omp parallel for
-    for(int n = 0; n < warpnztot*WARPSIZE; n++){
+    for(long n = 0; n < warpnztot*(long)WARPSIZE; n++){
       #ifdef MATRIX
       warpindval[n].ind = 0;
       #else
@@ -1013,7 +1031,7 @@ void preproc(){
         for(int n = 0; n < raynumout; n++)
           numint[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < mynumpix; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++)
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++)
             numint[rowindex[n]]++;
         int count = 0;
         for(int n = 0; n < raynumout; n++)
@@ -1026,12 +1044,12 @@ void preproc(){
         for(int n = 0; n < blocksize*numbuff[block]; n++)
           indcount[n] = 0;
         for(int m = block*blocksize; m < (block+1)*blocksize && m < mynumpix; m++)
-          for(int n = rowdispl[m]; n < rowdispl[m+1]; n++){
+          for(long n = rowdispl[m]; n < rowdispl[m+1]; n++){
             int buffloc = numint[rowindex[n]];
             int *count = indcount+blocksize*buffloc;
             int indloc = m%blocksize;
             int warp = ((buffdispl[block]+buffloc)*blocksize+indloc)/WARPSIZE;
-            int ind = (warpdispl[warp]+count[indloc])*WARPSIZE+m%WARPSIZE;
+            long ind = (warpdispl[warp]+count[indloc])*(long)WARPSIZE+m%WARPSIZE;
             #ifdef MATRIX
             warpindval[ind].ind = numind[rowindex[n]];
             #else
@@ -1073,10 +1091,10 @@ void preproc(){
   if(myid==0)printf("\nFILL PROJECTION MATRIX\n");
   {
     #ifndef MATRIX
-    proj_warpvalue = new MATPREC[proj_warpnztot*WARPSIZE];
+    proj_warpvalue = new MATPREC[proj_warpnztot*(long)WARPSIZE];
     #endif
     #pragma omp parallel for
-    for(int n = 0; n < proj_warpnztot*WARPSIZE; n++)
+    for(long n = 0; n < proj_warpnztot*(long)WARPSIZE; n++)
       #ifdef MATRIX
       proj_warpindval[n].val = 0.0;
       #else
@@ -1092,7 +1110,7 @@ void preproc(){
         for(int buff = proj_buffdispl[block]; buff < proj_buffdispl[block+1]; buff++){
           int warp = (buff*proj_blocksize+n)/WARPSIZE;
           for(int row = proj_warpdispl[warp]; row < proj_warpdispl[warp+1]; row++){
-            int ind = row*WARPSIZE+n%WARPSIZE;
+            long ind = row*(long)WARPSIZE+n%WARPSIZE;
             if(proj_warpindextag[ind]){
               #ifdef MATRIX
               int mapind = proj_mapdispl[buff]+proj_warpindval[ind].ind;
@@ -1131,10 +1149,10 @@ void preproc(){
   if(myid==0)printf("FILL BACKPROJECTION MATRIX\n");
   {
     #ifndef MATRIX
-    back_warpvalue = new MATPREC[back_warpnztot*WARPSIZE];
+    back_warpvalue = new MATPREC[back_warpnztot*(long)WARPSIZE];
     #endif
     #pragma omp parallel for
-    for(int n = 0; n < back_warpnztot*WARPSIZE; n++)
+    for(long n = 0; n < back_warpnztot*(long)WARPSIZE; n++)
       #ifdef MATRIX
       back_warpindval[n].val = 0.0;
       #else
@@ -1155,7 +1173,7 @@ void preproc(){
         for(int buff = back_buffdispl[block]; buff < back_buffdispl[block+1]; buff++){
           int warp = (buff*back_blocksize+n)/WARPSIZE;
           for(int row = back_warpdispl[warp]; row < back_warpdispl[warp+1]; row++){
-            int ind = row*WARPSIZE+n%WARPSIZE;
+            long ind = row*(long)WARPSIZE+n%WARPSIZE;
             if(back_warpindextag[ind]){
               #ifdef MATRIX
               int mapind = back_mapdispl[buff]+back_warpindval[ind].ind;

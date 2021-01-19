@@ -182,10 +182,54 @@ extern COMMPREC **noderecvbuff_p;
 extern int *noderecvdevice_p;
 
 #ifdef MATRIX
-__global__ void kernel_project __launch_bounds__(1024,1) (VECPREC*,VECPREC*,matrix*,int,int,int*,int*,int*,int*,int*,int);
+__global__ void kernel_project __launch_bounds__(1024,2) (VECPREC *y, VECPREC *x, matrix *indval, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
 #else
-__global__ void kernel_project __launch_bounds__(1024,1) (VECPREC*,VECPREC*,unsigned short*,MATPREC*,int,int,int*,int*,int*,int*,int*,int);
+__global__ void kernel_project __launch_bounds__(1024,2) (VECPREC *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
 #endif
+  extern __shared__ VECPREC shared[];
+  #ifdef MIXED
+  float acc[FFACTOR] = {0.0};
+  #else
+  VECPREC acc[FFACTOR] = {0.0};
+  #endif
+  int wind = threadIdx.x%WARPSIZE;
+  for(int buff = buffdispl[blockIdx.x]; buff < buffdispl[blockIdx.x+1]; buff++){
+    int mapoffset = mapdispl[buff];
+    for(int i = threadIdx.x; i < mapnz[buff]; i += blockDim.x){
+      int ind = buffmap[mapoffset+i];
+      #pragma unroll
+      for(int f = 0; f < FFACTOR; f++)
+        shared[f*buffsize+i] = x[f*numcol+ind];
+    }
+    __syncthreads();
+    int warp = (buff*blockDim.x+threadIdx.x)/WARPSIZE;
+    for(int n = displ[warp]; n < displ[warp+1]; n++){
+      #ifdef MATRIX
+      matrix mat = indval[n*(long)WARPSIZE+wind];
+        #ifdef MIXED
+      float val = mat.val;
+      #pragma unroll
+      for(int f = 0; f < FFACTOR; f++)
+        acc[f] += __half2float(shared[f*buffsize+mat.ind])*val;
+        #else
+      for(int f = 0; f < FFACTOR; f++)
+        acc[f] += shared[f*buffsize+mat.ind]*mat.val;
+        #endif
+      #else
+      unsigned short ind = index[n*(long)WARPSIZE+wind];
+      MATPREC val = value[n*(long)WARPSIZE+wind];
+      #pragma unroll
+      for(int f = 0; f < FFACTOR; f++)
+        acc[f] += shared[f*buffsize+ind]*val;
+      #endif
+    }
+    __syncthreads();
+  }
+  int row = blockIdx.x*blockDim.x+threadIdx.x;
+  if(row  < numrow)
+    for(int f = 0; f < FFACTOR; f++)
+      y[f*numrow+row] = acc[f];
+};
 __global__ void kernel_reduce(COMMPREC*,COMMPREC*,int*,int*,int,int,int*,int*);
 __global__ void kernel_reducenopack(double*,COMMPREC*,int*,int*,int,int,int*,double);
 __global__ void kernel_scatternopack(double*,COMMPREC*,int*,int*,int,int,int*,double);
@@ -219,10 +263,10 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
     cudaGetDeviceCount(&deviceCount);
     printf("\n");
     printf("Device Count: %d\n",deviceCount);
-    int dev = 0;
     cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, dev);
-    printf("Device %d name: %s\n",dev,deviceProp.name);
+    cudaGetDeviceProperties(&deviceProp,0);
+    printf("Device %d name: %s\n",0,deviceProp.name);
+    printf("Clock Frequency: %f GHz\n",deviceProp.clockRate/1.e9);
     printf("Computational Capabilities: %d, %d\n",deviceProp.major,deviceProp.minor);
     printf("Maximum global memory size: %lu\n",deviceProp.totalGlobalMem);
     printf("Maximum constant memory size: %lu\n",deviceProp.totalConstMem);
@@ -231,6 +275,7 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
     printf("Maximum grid dimensions: %dx%dx%d\n",deviceProp.maxGridSize[0],deviceProp.maxGridSize[1],deviceProp.maxGridSize[2]);
     printf("Maximum threads per block: %d\n",deviceProp.maxThreadsPerBlock);
     printf("Warp size: %d\n",deviceProp.warpSize);
+    printf("32-bit Reg. per block: %d\n",deviceProp.regsPerBlock);
     printf("\n");
   }
 
@@ -269,8 +314,8 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
   projmem = projmem + sizeof(int)/1.0e9*proj_numbufftot;
   projmem = projmem + sizeof(int)/1.0e9*proj_mapnztot;
   projmem = projmem + sizeof(int)/1.0e9*(proj_numbufftot*(proj_blocksize/WARPSIZE)+1);
-  projmem = projmem + sizeof(unsigned short)/1.0e9*(proj_warpnztot*WARPSIZE);
-  projmem = projmem + sizeof(MATPREC)/1.0e9*(proj_warpnztot*WARPSIZE);
+  projmem = projmem + sizeof(unsigned short)/1.0e9*(proj_warpnztot*(long)WARPSIZE);
+  projmem = projmem + sizeof(MATPREC)/1.0e9*(proj_warpnztot*(long)WARPSIZE);
   projmem = projmem + sizeof(int)/1.0e9*proj_mapnztot;
   //printf("PROC %d FORWARD PROJECTION MEMORY: %f GB\n",myid,projmem);
   double backmem = 0.0;
@@ -279,8 +324,8 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
   backmem = backmem + sizeof(int)/1.0e9*back_numbufftot;
   backmem = backmem + sizeof(int)/1.0e9*back_mapnztot;
   backmem = backmem + sizeof(int)/1.0e9*(back_numbufftot*(back_blocksize/WARPSIZE)+1);
-  backmem = backmem + sizeof(unsigned short)/1.0e9*(back_warpnztot*WARPSIZE);
-  backmem = backmem + sizeof(MATPREC)/1.0e9*(back_warpnztot*WARPSIZE);
+  backmem = backmem + sizeof(unsigned short)/1.0e9*(back_warpnztot*(long)WARPSIZE);
+  backmem = backmem + sizeof(MATPREC)/1.0e9*(back_warpnztot*(long)WARPSIZE);
   backmem = backmem + sizeof(int)/1.0e9*back_mapnztot;
   //printf("PROC %d BACKPROJECTION MEMORY: %f GB\n",myid,backmem);
 
@@ -315,21 +360,21 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
   delete[] back_buffmap;
   delete[] back_warpdispl;
   #ifdef MATRIX
-  cudaMalloc((void**)&proj_warpindval_d,sizeof(matrix)*proj_warpnztot*WARPSIZE);
-  cudaMalloc((void**)&back_warpindval_d,sizeof(matrix)*back_warpnztot*WARPSIZE);
-  cudaMemcpy(proj_warpindval_d,proj_warpindval,sizeof(matrix)*proj_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
-  cudaMemcpy(back_warpindval_d,back_warpindval,sizeof(matrix)*back_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
+  cudaMalloc((void**)&proj_warpindval_d,sizeof(matrix)*proj_warpnztot*(long)WARPSIZE);
+  cudaMalloc((void**)&back_warpindval_d,sizeof(matrix)*back_warpnztot*(long)WARPSIZE);
+  cudaMemcpy(proj_warpindval_d,proj_warpindval,sizeof(matrix)*proj_warpnztot*(long)WARPSIZE,cudaMemcpyHostToDevice);
+  cudaMemcpy(back_warpindval_d,back_warpindval,sizeof(matrix)*back_warpnztot*(long)WARPSIZE,cudaMemcpyHostToDevice);
   delete[] proj_warpindval;
   delete[] back_warpindval;
   #else
-  cudaMalloc((void**)&proj_warpindex_d,sizeof(unsigned short)*proj_warpnztot*WARPSIZE);
-  cudaMalloc((void**)&proj_warpvalue_d,sizeof(MATPREC)*proj_warpnztot*WARPSIZE);
-  cudaMalloc((void**)&back_warpindex_d,sizeof(unsigned short)*back_warpnztot*WARPSIZE);
-  cudaMalloc((void**)&back_warpvalue_d,sizeof(MATPREC)*back_warpnztot*WARPSIZE);
-  cudaMemcpy(proj_warpindex_d,proj_warpindex,sizeof(unsigned short)*proj_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
-  cudaMemcpy(proj_warpvalue_d,proj_warpvalue,sizeof(MATPREC)*proj_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
-  cudaMemcpy(back_warpindex_d,back_warpindex,sizeof(unsigned short)*back_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
-  cudaMemcpy(back_warpvalue_d,back_warpvalue,sizeof(MATPREC)*back_warpnztot*WARPSIZE,cudaMemcpyHostToDevice);
+  cudaMalloc((void**)&proj_warpindex_d,sizeof(unsigned short)*proj_warpnztot*(long)WARPSIZE);
+  cudaMalloc((void**)&proj_warpvalue_d,sizeof(MATPREC)*proj_warpnztot*(long)WARPSIZE);
+  cudaMalloc((void**)&back_warpindex_d,sizeof(unsigned short)*back_warpnztot*(long)WARPSIZE);
+  cudaMalloc((void**)&back_warpvalue_d,sizeof(MATPREC)*back_warpnztot*(long)WARPSIZE);
+  cudaMemcpy(proj_warpindex_d,proj_warpindex,sizeof(unsigned short)*proj_warpnztot*(long)WARPSIZE,cudaMemcpyHostToDevice);
+  cudaMemcpy(proj_warpvalue_d,proj_warpvalue,sizeof(MATPREC)*proj_warpnztot*(long)WARPSIZE,cudaMemcpyHostToDevice);
+  cudaMemcpy(back_warpindex_d,back_warpindex,sizeof(unsigned short)*back_warpnztot*(long)WARPSIZE,cudaMemcpyHostToDevice);
+  cudaMemcpy(back_warpvalue_d,back_warpvalue,sizeof(MATPREC)*back_warpnztot*(long)WARPSIZE,cudaMemcpyHostToDevice);
   delete[] proj_warpindex;
   delete[] proj_warpvalue;
   delete[] back_warpindex;
@@ -424,7 +469,27 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
     printf("TOTAL GPU MEMORY gpumem %f GB + batchmem %f GB + commem %f GB = %f GB\n",gputotmem,batchtotmem,commtotmem,gputotmem+batchtotmem+commtotmem);
   }
 
-  cudaFuncSetAttribute(kernel_project,cudaFuncAttributeMaxDynamicSharedMemorySize,98304);
+  cudaFuncSetAttribute(kernel_project,cudaFuncAttributeMaxDynamicSharedMemorySize,(164-1)*1024);
+  cudaFuncSetAttribute(kernel_project,cudaFuncAttributePreferredSharedMemoryCarveout,cudaSharedmemCarveoutMaxShared);
+
+  cudaFuncAttributes funcAttributes;
+  cudaFuncGetAttributes(&funcAttributes,kernel_project);
+  if(myid==0){
+    printf("\n");
+    printf("SpMM Attributes\n");
+    printf("Binary Version: %d\n",funcAttributes.binaryVersion);
+    printf("Cache Mode: %d\n",funcAttributes.cacheModeCA);
+    printf("Constant Memory: %lu\n",funcAttributes.constSizeBytes);
+    printf("Local Memory: %lu\n",funcAttributes.localSizeBytes);
+    printf("Max Dynamic Shared Memory: %d\n",funcAttributes.maxDynamicSharedSizeBytes);
+    printf("Max Threads per Block: %d\n",funcAttributes.maxThreadsPerBlock);
+    printf("Number of Registers: %d\n",funcAttributes.numRegs);
+    printf("Shared Memory Carveout: %d\n",funcAttributes.preferredShmemCarveout);
+    printf("PTX Version %d\n",funcAttributes.ptxVersion);
+    printf("Static Shared Memory: %lu\n",funcAttributes.sharedSizeBytes);
+    printf("\n");
+  }
+
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
   sendrequest = new MPI_Request[numproc_data];
@@ -716,56 +781,6 @@ void partial_backproject(){
     //if(myid==0)printf("backproject %e milliseconds\n",milliseconds);
     bktime += milliseconds/1e3;
 };
-
-#ifdef MATRIX
-__global__ void kernel_project(VECPREC *y, VECPREC *x, matrix *indval, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
-#else
-__global__ void kernel_project(VECPREC *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
-#endif
-  extern __shared__ VECPREC shared[];
-  #ifdef MIXED
-  float acc[FFACTOR] = {0.0};
-  #else
-  VECPREC acc[FFACTOR] = {0.0};
-  #endif
-  int wind = threadIdx.x%WARPSIZE;
-  for(int buff = buffdispl[blockIdx.x]; buff < buffdispl[blockIdx.x+1]; buff++){
-    int mapoffset = mapdispl[buff];
-    for(int i = threadIdx.x; i < mapnz[buff]; i += blockDim.x){
-      int ind = buffmap[mapoffset+i];
-      #pragma unroll
-      for(int f = 0; f < FFACTOR; f++)
-        shared[f*buffsize+i] = x[f*numcol+ind];
-    }
-    __syncthreads();
-    int warp = (buff*blockDim.x+threadIdx.x)/WARPSIZE;
-    for(int n = displ[warp]; n < displ[warp+1]; n++){
-      #ifdef MATRIX
-      matrix mat = indval[n*WARPSIZE+wind];
-        #ifdef MIXED
-      float val = mat.val;
-      #pragma unroll
-      for(int f = 0; f < FFACTOR; f++)
-        acc[f] += __half2float(shared[f*buffsize+mat.ind])*val;
-        #else
-      for(int f = 0; f < FFACTOR; f++)
-        acc[f] += shared[f*buffsize+mat.ind]*mat.val;
-        #endif
-      #else
-      unsigned short ind = index[n*WARPSIZE+wind];
-      MATPREC val = value[n*WARPSIZE+wind];
-      #pragma unroll
-      for(int f = 0; f < FFACTOR; f++)
-        acc[f] += shared[f*buffsize+ind]*val;
-      #endif
-    }
-    __syncthreads();
-  }
-  int row = blockIdx.x*blockDim.x+threadIdx.x;
-  if(row  < numrow)
-    for(int f = 0; f < FFACTOR; f++)
-      y[f*numrow+row] = acc[f];
-};
 __global__ void kernel_reduce(COMMPREC *y, COMMPREC *x, int *displ, int *index, int numrow, int numcol, int *packmap, int *unpackmap){
   int row = blockIdx.x*blockDim.x+threadIdx.x;
   #ifdef MIXED
@@ -801,8 +816,7 @@ __global__ void kernel_reducenopack(double *y, COMMPREC *x, int *displ, int *ind
         #ifdef MIXED
         reduce[f] += __half2float(x[unpackmap[f*numcol+ind]]);
         #else
-        //reduce[f] += x[unpackmap[f*numcol+ind]];
-        reduce[f] += x[f*numcol+ind];
+        reduce[f] += x[unpackmap[f*numcol+ind]];
         #endif
     }
     for(int f = 0; f < FFACTOR; f++)
