@@ -182,9 +182,9 @@ extern COMMPREC **noderecvbuff_p;
 extern int *noderecvdevice_p;
 
 #ifdef MATRIX
-__global__ void kernel_project __launch_bounds__(1024,2) (VECPREC *y, VECPREC *x, matrix *indval, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
+__global__ void kernel_project __launch_bounds__(1024,1) (VECPREC *y, VECPREC *x, matrix *indval, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
 #else
-__global__ void kernel_project __launch_bounds__(1024,2) (VECPREC *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
+__global__ void kernel_project __launch_bounds__(1024,1) (VECPREC *y, VECPREC *x, unsigned short *index, MATPREC *value, int numrow, int numcol, int *buffdispl, int *displ, int *mapdispl, int *mapnz, int *buffmap, int buffsize){
 #endif
   extern __shared__ VECPREC shared[];
   #ifdef MIXED

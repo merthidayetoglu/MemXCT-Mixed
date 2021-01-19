@@ -38,9 +38,9 @@ export BACKBLOCK=1024
 export PROJBUFF=81 #KB
 export BACKBUFF=81 #KB
 
-export SINFILE=/lus/theta-fs0/projects/hp-ptycho/bicer/tomography/andrew/B1000/extracted/v1_extracted.i0.s256.spectral.data
+export SINFILE=/lus/theta-fs0/projects/hp-ptycho/bicer/tomography/andrew/B1000/extracted/v1_extracted.i768.s256.spectral.data
 export THEFILE=/lus/theta-fs0/projects/hp-ptycho/mert/andrew/extracted.theta.data
-export OUTFILE=/lus/theta-fs0/projects/hp-ptycho/mert/v1_extracted.i0.s256.recon
+export OUTFILE=/lus/theta-fs0/projects/hp-ptycho/mert/test_2.recon
 #export SINFILE=/lus/theta-fs0/projects/hp-ptycho/mert/ADS3_2slice.bin
 #export THEFILE=/lus/theta-fs0/projects/hp-ptycho/mert/ADS3_theta.bin
 #export OUTFILE=/lus/theta-fs0/projects/hp-ptycho/mert/ADS3_recon.bin
@@ -62,3 +62,4 @@ PROCS=$((NODES * PPN))
 # run /path/to/app.exe on $NODES nodes with $PPN processes per node
 mpirun -hostfile $COBALT_NODEFILE -n $PROCS -npernode $PPN -x OMP_NUM_THREADS=32 memxct
 
+date
