@@ -509,6 +509,8 @@ int main(int argc, char** argv){
           }
         }
         MPI_Recv(rayrecvbuff,mynumray*iobatchslice,MPI_FLOAT,0,0,MPI_COMM_DATA,MPI_STATUS_IGNORE);
+	if(myid_data==0)
+          MPI_Waitall(numproc_data,sendrequest,MPI_STATUSES_IGNORE);
         #pragma omp parallel for
         for(int n = 0; n < mynumray*iobatchslice; n++)
           res_h[slice*mynumray+n] = rayrecvbuff[n];

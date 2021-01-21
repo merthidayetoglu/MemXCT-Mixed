@@ -502,6 +502,7 @@ void setup_gpu(double **obj_d, double **gra_d, double **dir_d, double **res_d, d
     cudaStreamCreate(&nodestream[p]);
 
   communications();
+  return;
 }
 
 void project(double *sino_d, double *tomo_d, double scale, int batchslice){
@@ -523,10 +524,13 @@ void project(double *sino_d, double *tomo_d, double scale, int batchslice){
     MPI_Barrier(MPI_COMM_DATA);
     double chtime = MPI_Wtime();
     {
+      int sendcount = 0;
       int recvcount = 0;
       for(int p = 0; p < numproc_data; p++)
-        if(nodereduceout[p])
-          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+p);
+        if(nodereduceout[p]){
+          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+sendcount);
+	  sendcount++;
+	}
       for(int p = 0; p < numproc_data; p++)
         if(nodereduceinc[p]){
           MPI_Irecv(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+recvcount);
@@ -539,6 +543,7 @@ void project(double *sino_d, double *tomo_d, double scale, int batchslice){
         partial_project();
       }
       #endif
+      MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
       MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
     }
     MPI_Barrier(MPI_COMM_DATA);
@@ -597,15 +602,19 @@ void backproject(double *tomo_d, double *sino_d, double scale, int batchslice){
   double chtime = MPI_Wtime();
   {
     int sendcount = 0;
+    int recvcount = 0;
     for(int p = 0; p < numproc_data; p++)
       if(nodereduceout[p]){
         MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+sendcount);
         sendcount++;
       }
     for(int p = 0; p < numproc_data; p++)
-      if(nodereduceinc[p])
-        MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+p);
+      if(nodereduceinc[p]){
+        MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+recvcount);
+	recvcount++;
+      }
     MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
+    MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
   }
   MPI_Barrier(MPI_COMM_DATA);
   bchtime += MPI_Wtime()-chtime;
@@ -620,6 +629,7 @@ void backproject(double *tomo_d, double *sino_d, double scale, int batchslice){
   for(int slice = 0; slice < batchslice; slice += FFACTOR){
     double chtime;
     int sendcount = 0;
+    int recvcount = 0;
     if(slice+FFACTOR < batchslice){
       //HOST SCATTER
       cudaEventRecord(start);
@@ -644,8 +654,10 @@ void backproject(double *tomo_d, double *sino_d, double scale, int batchslice){
           sendcount++;
         }
       for(int p = 0; p < numproc_data; p++)
-        if(nodereduceinc[p])
-          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+p);
+        if(nodereduceinc[p]){
+          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+recvcount);
+	  recvcount++;
+	}
     }
     #ifdef OVERLAP
     //PARTIAL BACKPROJECTION
@@ -654,6 +666,7 @@ void backproject(double *tomo_d, double *sino_d, double scale, int batchslice){
     #endif
     if(slice+FFACTOR < batchslice){
       MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
+      MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
       MPI_Barrier(MPI_COMM_DATA);
       bchtime += MPI_Wtime()-chtime;
       //if(myid==0)printf("rack time %e\n",MPI_Wtime()-chtime);

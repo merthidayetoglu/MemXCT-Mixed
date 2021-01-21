@@ -101,27 +101,35 @@ void communications(){
   socketrecvbuff_p = new COMMPREC*[numproc_socket];
   socketrecvbuffdispl_p = new int[numproc_socket];
   cudaIpcMemHandle_t sockethandle[numproc_socket];
-  //RECEIVER SENDS MEMORY HANDLE
-  for(int precv = 0; precv < numproc_socket; precv++)
-    if(socketrecvcomm[precv]){
-      MPI_Issend(&socketrecvcommdispl[precv],1,MPI_INT,precv,1,MPI_COMM_SOCKET,sendrequest+precv);
-      if(myid_socket!=precv){
-        cudaIpcGetMemHandle(&sockethandle[precv],socketreducerecvbuff_d);
-        MPI_Issend(&sockethandle[precv],sizeof(cudaIpcMemHandle_t),MPI_BYTE,precv,0,MPI_COMM_SOCKET,recvrequest+precv);
+  {
+    int sendcount = 0;
+    int recvcount = 0;
+    //RECEIVER SENDS MEMORY HANDLE
+    for(int precv = 0; precv < numproc_socket; precv++)
+      if(socketrecvcomm[precv]){
+        MPI_Issend(&socketrecvcommdispl[precv],1,MPI_INT,precv,1,MPI_COMM_SOCKET,sendrequest+sendcount);
+	sendcount++;
+        if(myid_socket!=precv){
+          cudaIpcGetMemHandle(&sockethandle[precv],socketreducerecvbuff_d);
+          MPI_Issend(&sockethandle[precv],sizeof(cudaIpcMemHandle_t),MPI_BYTE,precv,0,MPI_COMM_SOCKET,recvrequest+recvcount);
+	  recvcount++;
+        }
+        else
+          socketrecvbuff_p[precv] = socketreducerecvbuff_d;
       }
-      else
-        socketrecvbuff_p[precv] = socketreducerecvbuff_d;
-    }
-  //SENDER OPENS MEMORY HANDLE
-  for(int psend = 0; psend < numproc_socket; psend++)
-    if(socketsendcomm[psend]){
-      MPI_Recv(&socketrecvbuffdispl_p[psend],1,MPI_INT,psend,1,MPI_COMM_SOCKET,MPI_STATUS_IGNORE);
-      if(myid_socket!=psend){
-        cudaIpcMemHandle_t temphandle;
-        MPI_Recv(&temphandle,sizeof(cudaIpcMemHandle_t),MPI_BYTE,psend,0,MPI_COMM_SOCKET,MPI_STATUS_IGNORE);
-        cudaIpcOpenMemHandle((void**)&socketrecvbuff_p[psend],temphandle,cudaIpcMemLazyEnablePeerAccess);
+    //SENDER OPENS MEMORY HANDLE
+    for(int psend = 0; psend < numproc_socket; psend++)
+      if(socketsendcomm[psend]){
+        MPI_Recv(&socketrecvbuffdispl_p[psend],1,MPI_INT,psend,1,MPI_COMM_SOCKET,MPI_STATUS_IGNORE);
+        if(myid_socket!=psend){
+          cudaIpcMemHandle_t temphandle;
+          MPI_Recv(&temphandle,sizeof(cudaIpcMemHandle_t),MPI_BYTE,psend,0,MPI_COMM_SOCKET,MPI_STATUS_IGNORE);
+          cudaIpcOpenMemHandle((void**)&socketrecvbuff_p[psend],temphandle,cudaIpcMemLazyEnablePeerAccess);
+        }
       }
-    }
+    MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
+    MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
+  }
   //RECEIVER DEVICE ID
   socketrecvdevice_p = new int[numproc_socket];
   for(int p = 0; p < numproc_socket; p++)
@@ -163,27 +171,35 @@ void communications(){
   noderecvbuff_p = new COMMPREC*[numproc_node];
   noderecvbuffdispl_p = new int[numproc_node];
   cudaIpcMemHandle_t nodehandle[numproc_node];
-  //RECEIVER SENDS MEMORY HANDLE
-  for(int precv = 0; precv < numproc_node; precv++)
-    if(noderecvcomm[precv]){
-      MPI_Issend(&noderecvcommdispl[precv],1,MPI_INT,precv,1,MPI_COMM_NODE,sendrequest+precv);
-      if(myid_node!=precv){
-        cudaIpcGetMemHandle(&nodehandle[precv],nodereducerecvbuff_d);
-        MPI_Issend(&nodehandle[precv],sizeof(cudaIpcMemHandle_t),MPI_BYTE,precv,0,MPI_COMM_NODE,recvrequest+precv);
+  {
+    int sendcount = 0;
+    int recvcount = 0;
+    //RECEIVER SENDS MEMORY HANDLE
+    for(int precv = 0; precv < numproc_node; precv++)
+      if(noderecvcomm[precv]){
+        MPI_Issend(&noderecvcommdispl[precv],1,MPI_INT,precv,1,MPI_COMM_NODE,sendrequest+sendcount);
+	sendcount++;
+        if(myid_node!=precv){
+          cudaIpcGetMemHandle(&nodehandle[precv],nodereducerecvbuff_d);
+          MPI_Issend(&nodehandle[precv],sizeof(cudaIpcMemHandle_t),MPI_BYTE,precv,0,MPI_COMM_NODE,recvrequest+recvcount);
+	  recvcount++;
+        }
+        else
+          noderecvbuff_p[precv] = nodereducerecvbuff_d;
       }
-      else
-        noderecvbuff_p[precv] = nodereducerecvbuff_d;
-    }
-  //SENDER OPENS MEMORY HANDLE
-  for(int psend = 0; psend < numproc_node; psend++)
-    if(nodesendcomm[psend]){
-      MPI_Recv(&noderecvbuffdispl_p[psend],1,MPI_INT,psend,1,MPI_COMM_NODE,MPI_STATUS_IGNORE);
-      if(myid_node!=psend){
-        cudaIpcMemHandle_t temphandle;
-        MPI_Recv(&temphandle,sizeof(cudaIpcMemHandle_t),MPI_BYTE,psend,0,MPI_COMM_NODE,MPI_STATUS_IGNORE);
-        cudaIpcOpenMemHandle((void**)&noderecvbuff_p[psend],temphandle,cudaIpcMemLazyEnablePeerAccess);
+    //SENDER OPENS MEMORY HANDLE
+    for(int psend = 0; psend < numproc_node; psend++)
+      if(nodesendcomm[psend]){
+        MPI_Recv(&noderecvbuffdispl_p[psend],1,MPI_INT,psend,1,MPI_COMM_NODE,MPI_STATUS_IGNORE);
+        if(myid_node!=psend){
+          cudaIpcMemHandle_t temphandle;
+          MPI_Recv(&temphandle,sizeof(cudaIpcMemHandle_t),MPI_BYTE,psend,0,MPI_COMM_NODE,MPI_STATUS_IGNORE);
+          cudaIpcOpenMemHandle((void**)&noderecvbuff_p[psend],temphandle,cudaIpcMemLazyEnablePeerAccess);
+        }
       }
-    }
+    MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
+    MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
+  }
   //RECEIVER DEVICE ID
   noderecvdevice_p = new int[numproc_node];
   for(int p = 0; p < numproc_node; p++)
@@ -203,8 +219,8 @@ void communications(){
       }
       cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_NODE);
-      MPI_Allreduce(MPI_IN_PLACE,&proj_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("proj node warmup time %e\n",MPI_Wtime()-time);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     }
     {
       cudaDeviceSynchronize();
@@ -218,8 +234,8 @@ void communications(){
         }
       cudaDeviceSynchronize();
       MPI_Barrier(MPI_COMM_NODE);
-      MPI_Allreduce(MPI_IN_PLACE,&back_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("back node warmup time %e\n",MPI_Wtime()-time);
+      MPI_Allreduce(MPI_IN_PLACE,&back_internode,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     }
   }
   //HOST IPC WARM-UP
@@ -227,10 +243,12 @@ void communications(){
     {
       MPI_Barrier(MPI_COMM_DATA);
       double chtime = MPI_Wtime();
+      int sendcount = 0;
       int recvcount = 0;
       for(int p = 0; p < numproc_data; p++)
         if(nodereduceout[p]){
-          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+p);
+          MPI_Issend(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+sendcount);
+	  sendcount++;
           if(p/numproc_node != myid_data/numproc_node)
             proj_interhost += nodereduceout[p];
         }
@@ -240,15 +258,17 @@ void communications(){
           recvcount++;
         }
       }
+      MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
       MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
       MPI_Barrier(MPI_COMM_DATA);
-      MPI_Allreduce(MPI_IN_PLACE,&proj_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("proj host time %e\n",MPI_Wtime()-chtime);
+      MPI_Allreduce(MPI_IN_PLACE,&proj_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     }
     {
       MPI_Barrier(MPI_COMM_DATA);
       double chtime = MPI_Wtime();
       int sendcount = 0;
+      int recvcount = 0;
       for(int p = 0; p < numproc_data; p++)
         if(nodereduceout[p]){
           MPI_Irecv(nodesendbuff_h+nodereduceoutdispl[p]*FFACTOR,nodereduceout[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,sendrequest+sendcount);
@@ -256,14 +276,16 @@ void communications(){
         }
       for(int p = 0; p < numproc_data; p++)
         if(nodereduceinc[p]){
-          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+p);
+          MPI_Issend(noderecvbuff_h+nodereduceincdispl[p]*FFACTOR,nodereduceinc[p]*FFACTOR*sizeof(COMMPREC),MPI_BYTE,p,0,MPI_COMM_DATA,recvrequest+recvcount);
+	  recvcount++;
           if(p/numproc_node != myid_data/numproc_node)
             back_interhost += nodereduceinc[p];
         }
       MPI_Waitall(sendcount,sendrequest,MPI_STATUSES_IGNORE);
+      MPI_Waitall(recvcount,recvrequest,MPI_STATUSES_IGNORE);
       MPI_Barrier(MPI_COMM_DATA);
-      MPI_Allreduce(MPI_IN_PLACE,&back_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
       if(myid==0)printf("back host time %e\n",MPI_Wtime()-chtime);
+      MPI_Allreduce(MPI_IN_PLACE,&back_interhost,1,MPI_LONG,MPI_SUM,MPI_COMM_DATA);
     }
   }
 }

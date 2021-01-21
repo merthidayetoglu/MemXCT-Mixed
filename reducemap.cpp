@@ -273,9 +273,9 @@ void reducemap(){
         recvtemp += recvcount;
       }
       reducebuffdispl[p+1] = recvtemp;
+      MPI_Waitall(numproc_socket,sendrequest,MPI_STATUSES_IGNORE);
+      MPI_Waitall(numproc_socket,recvrequest,MPI_STATUSES_IGNORE);
     }
-    MPI_Waitall(numproc_socket,sendrequest,MPI_STATUSES_IGNORE);
-    MPI_Waitall(numproc_socket,recvrequest,MPI_STATUSES_IGNORE);
     delete[] socketindexmaptemp;
     socketreducedispl = new int[socketreduceoutdispl[numproc_data]+1];
     socketreducedispl[0] = 0;
@@ -558,9 +558,9 @@ void reducemap(){
         recvtemp += recvcount;
       }
       reducebuffdispl[p+1] = recvtemp; 
+      MPI_Waitall(numproc_node,sendrequest,MPI_STATUSES_IGNORE);
+      MPI_Waitall(numproc_node,recvrequest,MPI_STATUSES_IGNORE);
     }
-    MPI_Waitall(numproc_node,sendrequest,MPI_STATUSES_IGNORE);
-    MPI_Waitall(numproc_node,recvrequest,MPI_STATUSES_IGNORE);
     delete[] nodeindexmaptemp;
     nodereducedispl = new int[nodereduceoutdispl[numproc_data]+1];
     nodereducedispl[0] = 0;
