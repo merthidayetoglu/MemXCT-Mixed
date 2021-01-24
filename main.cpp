@@ -306,6 +306,11 @@ int main(int argc, char** argv){
   }
   proj_buffsize = proj_buffsize/FFACTOR;
   back_buffsize = back_buffsize/FFACTOR;
+  if(proj_buffsize > 65535 || back_buffsize > 65535){
+    if(myid==0)printf("BUFFER SIZE IS TOO LARGE!\n");
+    if(myid==0)printf("PROJ BUFFSIZE: %d BACK BUFFSIZE: %d\n",proj_buffsize,back_buffsize);
+    return 0;
+  }
   if(myid==0){
     printf("  EFFECTIVE BUFFER SIZE : %d (%f KB) / %d (%f KB)\n",proj_buffsize*FFACTOR,proj_buffsize*(int)sizeof(VECPREC)/1024.0*FFACTOR,back_buffsize*FFACTOR,back_buffsize*sizeof(VECPREC)/1024.0*FFACTOR);
     printf("   BUFFER SIZE PER SLICE: %d (%f KB) / %d (%f KB)\n",proj_buffsize,proj_buffsize*(int)sizeof(VECPREC)/1024.0,back_buffsize,back_buffsize*sizeof(VECPREC)/1024.0);

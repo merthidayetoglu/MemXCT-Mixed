@@ -7,7 +7,7 @@ export NUMRHO=4143 #shale 2048 chip 2448 charcoal 6613 brain 11283
 export STARTSLICE=0 #shale 0 (896) chip 512 (962) charcoal 0 (3815) brain 0 (5000)
 export NUMSLICE=256 #shale 1792 chip 1024 charcoal 4198 brain 9209
 export BATCHPROC=1
-export BATCHSIZE=256 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
+export BATCHSIZE=260 #MUST BE MULTIPLE OF FFACTOR!!! #shale 256 chip 32
 export IOBATCHSIZE=256
 #DOMAIN INFORMATION
 export PIXSIZE=1
@@ -35,22 +35,22 @@ export SPECSIZE=128
 #BLOCK & BUFFER SIZE
 export PROJBLOCK=1024
 export BACKBLOCK=1024
-export PROJBUFF=81 #KB
-export BACKBUFF=81 #KB
+export PROJBUFF=127 #KB
+export BACKBUFF=127 #KB
 
-export SINFILE=/lus/theta-fs0/projects/hp-ptycho/bicer/tomography/andrew/B1000/extracted/v1_extracted.i768.s256.spectral.data
-export THEFILE=/lus/theta-fs0/projects/hp-ptycho/mert/andrew/extracted.theta.data
-export OUTFILE=/lus/theta-fs0/projects/hp-ptycho/mert/test_2.recon
-#export SINFILE=/lus/theta-fs0/projects/hp-ptycho/mert/ADS3_2slice.bin
-#export THEFILE=/lus/theta-fs0/projects/hp-ptycho/mert/ADS3_theta.bin
-#export OUTFILE=/lus/theta-fs0/projects/hp-ptycho/mert/ADS3_recon.bin
+export SINFILE=/lus/grand/projects/hp-ptycho/andrew/v1_extracted.i0.s256.spectral.data
+export THEFILE=/lus/grand/projects/hp-ptycho/andrew/extracted.theta.data
+export OUTFILE=/lus/grand/projects/hp-ptycho/andrew/v1_extracted.i0.s256.recon.data
+#export SINFILE=/lus/grand/projects/hp-ptycho/tomo_00001_extracted.1792s.spectral.data
+#export THEFILE=/lus/grand/projects/hp-ptycho/tomo_00001_extracted.1792s.theta.data
+#export OUTFILE=/lus/grand/projects/hp-ptycho/tomo_recon.bin
 
-export PROCPERNODE=1 #PROCS PER NODE
-export PROCPERSOCKET=1 #PROCS PER SOCKET
+export PROCPERNODE=8 #PROCS PER NODE
+export PROCPERSOCKET=4 #PROCS PER SOCKET
 
 #export OMP_NUM_THREADS=32
 #mpirun -n 1 ncu --section MemoryWorkloadAnalysis --section SpeedOfLight memxct
-#mpirun -n 4 ./memxct
+#mpirun -n 1 ./memxct
 #exit 1
 
 # number of nodes

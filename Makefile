@@ -16,10 +16,10 @@ OBJECTS = preproc.o reducemap.o main.o raytrace.o kernels.o communications.o
 
 all:	$(TARGETS)
 
-%.o:    %.cpp 
+%.o:    %.cpp
 	${CXX} ${CXXFLAGS} ${OPTFLAGS} $^ -c -o $@
 
-%.o:    %.cu 
+%.o:    %.cu
 	${NVCC} ${NVCCFLAGS} $^ -c -o $@
 
 memxct: $(OBJECTS)
